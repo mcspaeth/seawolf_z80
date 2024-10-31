@@ -1,0 +1,3241 @@
+0001   0000             				;; out 01    = Explosion matrix
+0002   0000             				;; out 02    = Torpedo display
+0003   0000             				;; out 03    = Shifter data
+0004   0000             				;; out 04    = Shifter count
+0005   0000             				;; out 05    = Sound triggers
+0006   0000             				;; out 06    = watchdog (add this)
+0007   0000             
+0008   0000             				;; 2000-2001 = Pointer address for main game/attract loop
+0009   0000             				;; 2002      = Down counter (when $200e == 0)  (Game time?)
+0010   0000             				;; 2003      = Down counter ($1E to $00)
+0011   0000             				;; 2005      = Credits
+0012   0000             				;; 2006      = High score byte
+0013   0000             				;; 2007      = Last IN1
+0014   0000             				;; 2008	     = Last IN0
+0015   0000             				;; 2010      = Down counter (when $2003 == 0)
+0016   0000             				;; 2011      = Down counter
+0017   0000             	
+0018   0000             				;; 2014-2015 = Sprite loc to update (0 in attract)
+0019   0000             				;; 2016-2017 = 
+0020   0000             				;; 2018-2019 = Pointer to ship 0 data
+0021   0000             				;; 201a-201b = Pointer to ship 1 data
+0022   0000             				;; 201c      = Next sprite?
+0023   0000             				;; 201e	     = ??
+0024   0000             				;; 201f	     = ??
+0025   0000             	
+0026   0000             				;; 2020	     = Mask for subs to call at 04ce (when [[$2000]] == 00)
+0027   0000             				;; 	       D7 = $2002, D6 = $2010, D5 = $2011, D4 = $2021
+0028   0000             				;;             D3 = $2022, D2 = $2023, D1 = $2024, D0 = $2025
+0029   0000             				;; 2021      = Down counter (non-zero inhibits fire)
+0030   0000             				;; 2022	     = Down counter
+0031   0000             				;; 2023      = Down counter ($19 for small ship)
+0032   0000             				;; 2024      = Down counter
+0033   0000             				;; 2025      = Audio timer (down counter)
+0034   0000             				;; 2026      = Down counter ($0f for small ship)
+0035   0000             				;; 2027-2028 = Wave state
+0036   0000             				;; 2029	     = Next ship type
+0037   0000             				;; 202b	     = Player score
+0038   0000             				;; 202c      = ?? 
+0039   0000             				;; 202d	     = Torpedo status
+0040   0000             				;; 202e      = 1 if extended time passed
+0041   0000             				;; 2030      = Current sprite shift
+0042   0000             				;; 2058-2064 = Ship data 0 (Attract?)
+0043   0000             				;;		Byte 0   = X flags?
+0044   0000             				;; 		Byte 1   = Delta X
+0045   0000             				;; 		Byte 2   = X Pos	((loc-$2400) & $1f)<<3 | (shift & $07)
+0046   0000             				;; 		Byte 3   = Y flags
+0047   0000             				;; 		Byte 4   = Delta Y
+0048   0000             				;; 		Byte 5   = Y Pos	(loc-$2400)>>5
+0049   0000             				;; 		Byte 6   = ??
+0050   0000             				;; 		Byte 7-8 = Sprite tbl LSB,MSB
+0051   0000             				;; 		Byte 9-A = (address -> de -> hl)
+0052   0000             				;; 		Byte C-D = (read into bc)
+0053   0000             				;; 2065-2071 = Ship data 1
+0054   0000             				;; 2072-207e = Ship data 2
+0055   0000             				;; 207f-208b = Ship data 3
+0056   0000             				;; 208c-2098 = Ship data 4
+0057   0000             				;; 2099-20a5 = Ship data 5
+0058   0000             				;; 20a6-20b2 = Ship data 6
+0059   0000             				;; 20b3-20bf = Ship data 7
+0060   0000             				;; 20c0-20cc = Ship data 8
+0061   0000             				;; 20cd-20d9 = Ship data 9
+0062   0000             				;; 20da-20e6 = Ship data a
+0063   0000             	
+0064   0000             				;; Torpedo control?
+0065   0000             				;; 20c9-20e6 = $1e data block
+0066   0000             				;; 20e7-2104 = $1e data block
+0067   0000             				;; 2105-2122 = $1e data block
+0068   0000             				;; 2123-2140 = $1e data block
+0069   0000             
+0070   0000             				;; 215f-21a3 = $44 data block, cleared at $0088
+0071   0000             				;; 215f
+0072   0000             				;; 2181 
+0073   0000             	
+0074   0000             				;; 21f0-21f1 = Address for $0A3F clear if non-zero
+0075   0000             				;; 21f2-21f3 = Address for $0A3F clear if non-zero
+0076   0000             				;; 21f4-21f5 = Address for $0A3F clear if non-zero
+0077   0000             				;; 21f4-21f5 = Address for $0A3F clear if non-zero
+0078   0000             
+0079   0000             
+0080   0000             				;; RST $00 ($C7)
+0081   0000             	.org $0000
+0082   0000             L0000:
+0083   0000 00          	nop
+0084   0001 00          	nop
+0085   0002 31 00 24    	ld   sp,$2400									; Stack pointer
+0086   0005 C3 3A 04    	jp   L043A										; Startup jump
+0087   0008             
+0088   0008             				;; rst $08 ($cf interrupt vector)
+0089   0008 E5          	push hl
+0090   0009 D5          	push de
+0091   000A C5          	push bc
+0092   000B F5          	push af
+0093   000C C3 7E 00    	jp   L007E
+0094   000F 00          	nop
+0095   0010             
+0096   0010             				;; rst $10 ($d7 interrupt vector)
+0097   0010 E5          	push hl
+0098   0011 D5          	push de
+0099   0012 C5          	push bc
+0100   0013 F5          	push af
+0101   0014 3A 1F 20    	ld   a,($201F)
+0102   0017 A7          	and  a
+0103   0018 C2 3E 00    	jp   nz,L003E
+0104   001B             	
+0105   001B CD BC 03    	call L03BC										; Update wave
+0106   001E CD 2E 01    	call L012E										; Update a sprite
+0107   0021             	
+0108   0021 2A 16 20    	ld   hl,($2016)								; Sprite pointer
+0109   0024 7E          	ld   a,(hl)
+0110   0025 A7          	and  a
+0111   0026 F2 36 00    	jp   p,L0036									; Jump if not active
+0112   0029 E6 20       	and  $20
+0113   002B CA 36 00    	jp   z,L0036									; Jump if ??
+0114   002E             	
+0115   002E CD 5B 03    	call $035B										; Load de, bc from ship data
+0116   0031 0D          	dec  c
+0117   0032 EB          	ex   de,hl
+0118   0033 CD 2A 0A    	call L0A2A										; Draw b x c block from de at hl
+0119   0036             				
+0120   0036             L0036:
+0121   0036 3E FF       	ld   a,$FF
+0122   0038 32 1F 20    	ld   ($201F),a
+0123   003B C3 69 00    	jp   L0069										; End of interrupt routine
+0124   003E             	
+0125   003E             L003E:
+0126   003E 2A 16 20    	ld   hl,($2016)								; Sprite pointer
+0127   0041 7E          	ld   a,(hl)
+0128   0042 A7          	and  a
+0129   0043 F2 62 00    	jp   p,L0062									; Jump if not active
+0130   0046             	
+0131   0046 E6 40       	and  $40
+0132   0048 C2 50 00    	jp   nz,L0050									; Jump if not set to clear
+0133   004B 36 00       	ld   (hl),$00									; Clear sprite
+0134   004D C3 62 00    	jp   L0062
+0135   0050             	
+0136   0050             L0050:
+0137   0050 7E          	ld   a,(hl)										; Set bit 5
+0138   0051 F6 20       	or   $20
+0139   0053 77          	ld   (hl),a
+0140   0054 CD 65 01    	call L0165										; Update sprite
+0141   0057 78          	ld   a,b
+0142   0058 E5          	push hl
+0143   0059 2A 1C 20    	ld   hl,($201C)
+0144   005C 44          	ld   b,h
+0145   005D 4D          	ld   c,l
+0146   005E E1          	pop  hl
+0147   005F CD 16 0A    	call L0A16
+0148   0062             	
+0149   0062             L0062:
+0150   0062 CD 68 03    	call L0368
+0151   0065 AF          	xor  a
+0152   0066 32 1F 20    	ld   ($201F),a
+0153   0069             
+0154   0069             				;; End of interrupt routine
+0155   0069             L0069:
+0156   0069 DB 02       	in   a,($02)									; IN1
+0157   006B 47          	ld   b,a
+0158   006C DB 02       	in   a,($02)									; IN1
+0159   006E 21 07 20    	ld   hl,$2007									; Last IN1?
+0160   0071 11 CA 09    	ld   de,$09CA
+0161   0074 B8          	cp   b												; Bits changed?
+0162   0075 CC 05 0B    	call z,L0B05
+0163   0078 F1          	pop  af
+0164   0079 C1          	pop  bc
+0165   007A D1          	pop  de
+0166   007B E1          	pop  hl
+0167   007C FB          	ei
+0168   007D C9          	ret
+0169   007E             
+0170   007E             				;; Interrupt vector continues...
+0171   007E             L007E:
+0172   007E 3A 1F 20    	ld   a,($201F)
+0173   0081 A7          	and  a
+0174   0082 C2 19 01    	jp   nz,L0119
+0175   0085 CD BC 03    	call L03BC										; Update wave
+0176   0088             	
+0177   0088             				;; Clear $215f-$21a3
+0178   0088 21 5F 21    	ld   hl,$215F
+0179   008B 06 44       	ld   b,$44
+0180   008D AF          	xor  a
+0181   008E             L008E:
+0182   008E 77          	ld   (hl),a
+0183   008F 23          	inc  hl
+0184   0090 05          	dec  b
+0185   0091 C2 8E 00    	jp   nz,L008E
+0186   0094             	
+0187   0094 2A 18 20    	ld   hl,($2018)								; Sprite pointer 0
+0188   0097 3E 03       	ld   a,$03										; Loop counter 
+0189   0099             L0099:
+0190   0099 F5          	push af
+0191   009A 7D          	ld   a,l
+0192   009B FE 58       	cp   $58											; hl==$2058?
+0193   009D C2 A3 00    	jp   nz,L00A3
+0194   00A0             L00A0:
+0195   00A0 21 31 20    	ld   hl,$2031									; Resets to $2031
+0196   00A3             L00A3:
+0197   00A3 B4          	or   h
+0198   00A4 CA A0 00    	jp   z,L00A0
+0199   00A7             	
+0200   00A7 E5          	push hl
+0201   00A8 CD DE 01    	call L01DE
+0202   00AB E1          	pop  hl
+0203   00AC D2 B2 00    	jp   nc,L00B2
+0204   00AF             	
+0205   00AF 22 18 20    	ld   ($2018),hl								; Sprite pointer 0
+0206   00B2             L00B2:
+0207   00B2 11 0D 00    	ld   de,$000D
+0208   00B5 19          	add  hl,de
+0209   00B6 F1          	pop  af
+0210   00B7 3D          	dec  a
+0211   00B8 C2 99 00    	jp   nz,L0099									; Loop back
+0212   00BB             	
+0213   00BB 2A 18 20    	ld   hl,($2018)								; Sprite pointer 0
+0214   00BE CD 0C 03    	call L030C
+0215   00C1             	
+0216   00C1 2A 1A 20    	ld   hl,($201A)								; Sprite pointer 1
+0217   00C4 3E 03       	ld   a,$03										; Loop counter
+0218   00C6             L00C6:
+0219   00C6 F5          	push af
+0220   00C7 7D          	ld   a,l
+0221   00C8 FE 7F       	cp   $7F											; hl==$207F?
+0222   00CA C2 D0 00    	jp   nz,L00D0
+0223   00CD             L00CD:
+0224   00CD 21 58 20    	ld   hl,$2058									; Reset to $2058
+0225   00D0             L00D0:
+0226   00D0 B4          	or   h
+0227   00D1 CA CD 00    	jp   z,L00CD
+0228   00D4             	
+0229   00D4 E5          	push hl
+0230   00D5 CD DE 01    	call L01DE
+0231   00D8 E1          	pop  hl
+0232   00D9 D2 DF 00    	jp   nc,L00DF
+0233   00DC             	
+0234   00DC 22 1A 20    	ld   ($201A),hl								; Sprite pointer 1
+0235   00DF             L00DF:
+0236   00DF 11 0D 00    	ld   de,$000D									; Sprint increment
+0237   00E2 19          	add  hl,de
+0238   00E3 F1          	pop  af
+0239   00E4 3D          	dec  a
+0240   00E5 C2 C6 00    	jp   nz,L00C6									; Loop back
+0241   00E8             	
+0242   00E8 AF          	xor  a
+0243   00E9 32 30 20    	ld   ($2030),a								; Clear sprite shift
+0244   00EC             	
+0245   00EC 2A 16 20    	ld   hl,($2016)								; Pointer?
+0246   00EF 3E 04       	ld   a,$04										; Loop counter
+0247   00F1             L00F1:
+0248   00F1 F5          	push af
+0249   00F2 7D          	ld   a,l
+0250   00F3 FE 5F       	cp   $5F
+0251   00F5 C2 FB 00    	jp   nz,L00FB
+0252   00F8             	
+0253   00F8             L00F8:
+0254   00F8 21 E7 20    	ld   hl,$20E7									; Reset to $20E7
+0255   00FB             L00FB:
+0256   00FB B4          	or   h
+0257   00FC CA F8 00    	jp   z,L00F8
+0258   00FF             	
+0259   00FF E5          	push hl
+0260   0100 CD 50 02    	call L0250
+0261   0103 E1          	pop  hl
+0262   0104 D2 0A 01    	jp   nc,L010A
+0263   0107             	
+0264   0107 22 16 20    	ld   ($2016),hl								; Pointer?
+0265   010A             L010A:
+0266   010A 11 1E 00    	ld   de,$001E
+0267   010D 19          	add  hl,de
+0268   010E F1          	pop  af
+0269   010F 3D          	dec  a
+0270   0110 C2 F1 00    	jp   nz,L00F1									; Loop back
+0271   0113             	
+0272   0113 CD 31 03    	call L0331
+0273   0116 C3 69 00    	jp   L0069										; End of interrupt routine
+0274   0119             
+0275   0119             	
+0276   0119             L0119:
+0277   0119 2A 1A 20    	ld   hl,($201A)								; Ship 1 pointer
+0278   011C CD 0C 03    	call L030C
+0279   011F             	
+0280   011F 2A 1A 20    	ld   hl,($201A)								; Ship 1 pointer
+0281   0122 CD 3A 01    	call L013A
+0282   0125             	
+0283   0125 2A 18 20    	ld   hl,($2018)								; Ship 0 pointer
+0284   0128 CD 3A 01    	call L013A
+0285   012B C3 69 00    	jp   L0069										; End of interrupt routine
+0286   012E             
+0287   012E             				;; Called from rst $10
+0288   012E             L012E:
+0289   012E 2A 14 20    	ld   hl,($2014)
+0290   0131 7E          	ld   a,(hl)
+0291   0132 A7          	and  a
+0292   0133 F0          	ret  p												; No sprite to update?
+0293   0134 CD 65 01    	call L0165										; Update sprite
+0294   0137 C3 92 01    	jp   L0192
+0295   013A             
+0296   013A             				;; Handle 2018/201a entries (read into hl)
+0297   013A             L013A:
+0298   013A 7E          	ld   a,(hl)
+0299   013B A7          	and  a
+0300   013C F0          	ret  p												; Return if b7 clear
+0301   013D             	
+0302   013D E6 40       	and  $40											; Check bit 6
+0303   013F C2 45 01    	jp   nz,L0145									; Jump if set
+0304   0142 36 00       	ld   (hl),$00									; Clear entry
+0305   0144 C9          	ret
+0306   0145             
+0307   0145             				;; Bits 7 set, bit 6 clear
+0308   0145             L0145:
+0309   0145 7E          	ld   a,(hl)
+0310   0146 F6 20       	or   $20
+0311   0148 77          	ld   (hl),a										; Set bit 5	 
+0312   0149 F5          	push af
+0313   014A CD 65 01    	call L0165										; Update sprite
+0314   014D             				;; hl = screen loc, c=shift on return
+0315   014D             				
+0316   014D F1          	pop  af
+0317   014E E6 10       	and  $10											; Check bit 4
+0318   0150 CA 92 01    	jp   z,L0192									; Initial sprite draw
+0319   0153             	
+0320   0153 79          	ld   a,c
+0321   0154 85          	add  a,l
+0322   0155 6F          	ld   l,a
+0323   0156 E5          	push hl
+0324   0157 21 30 20    	ld   hl,$2030
+0325   015A 7E          	ld   a,(hl)
+0326   015B 2F          	cpl
+0327   015C E6 07       	and  $07
+0328   015E 77          	ld   (hl),a
+0329   015F E1          	pop  hl
+0330   0160 D3 04       	out  ($04),a									; Update shift count
+0331   0162 C3 B8 01    	jp   L01B8
+0332   0165             
+0333   0165             				;; Update/redraw sprite
+0334   0165             L0165:
+0335   0165 23          	inc  hl
+0336   0166 23          	inc  hl
+0337   0167 5E          	ld   e,(hl)										; LSB of loc + shift
+0338   0168 23          	inc  hl
+0339   0169 23          	inc  hl
+0340   016A 23          	inc  hl
+0341   016B 56          	ld   d,(hl)										; MSB of loc
+0342   016C 23          	inc  hl
+0343   016D 23          	inc  hl
+0344   016E CD 00 0A    	call L0A00										; de >> 3, e&3 -> c
+0345   0171 79          	ld   a,c											; (shift)
+0346   0172 32 30 20    	ld   ($2030),a
+0347   0175 D3 04       	out  ($04),a									; Shifter count
+0348   0177 D5          	push de												; Store screen loc
+0349   0178 5E          	ld   e,(hl)										; Read rom loc
+0350   0179 23          	inc  hl
+0351   017A 56          	ld   d,(hl)
+0352   017B 23          	inc  hl
+0353   017C EB          	ex   de,hl										; rom loc -> hl
+0354   017D 4E          	ld   c,(hl)										; Read bc (row/cols)
+0355   017E 23          	inc  hl
+0356   017F 46          	ld   b,(hl)
+0357   0180 23          	inc  hl
+0358   0181 E3          	ex   (sp),hl									; swap screen loc 
+0359   0182 EB          	ex   de,hl										; Back to ram table
+0360   0183 73          	ld   (hl),e
+0361   0184 23          	inc  hl
+0362   0185 72          	ld   (hl),d
+0363   0186 23          	inc  hl
+0364   0187 71          	ld   (hl),c
+0365   0188 34          	inc  (hl)											; +1 wide for shifting?
+0366   0189 23          	inc  hl
+0367   018A 70          	ld   (hl),b
+0368   018B 23          	inc  hl
+0369   018C 22 1C 20    	ld   ($201C),hl
+0370   018F EB          	ex   de,hl										; hl = screen loc
+0371   0190 D1          	pop  de												; de = sprite data in ROM
+0372   0191 C9          	ret
+0373   0192             
+0374   0192             				;; Initial sprite draw
+0375   0192             L0192:
+0376   0192 C5          	push bc												; bc = bytes wide, pix high
+0377   0193 E5          	push hl												; hl = screen loc
+0378   0194             L0194:
+0379   0194 1A          	ld   a,(de)										; Sprite byte
+0380   0195 13          	inc  de
+0381   0196 D3 03       	out  ($03),a									; MB12421 data write
+0382   0198 DB 03       	in   a,($03)									; MB12421 data read
+0383   019A 77          	ld   (hl),a										; Write to RAM
+0384   019B 23          	inc  hl
+0385   019C 0D          	dec  c
+0386   019D C2 94 01    	jp   nz,L0194									; Loop for width
+0387   01A0 AF          	xor  a
+0388   01A1 D3 03       	out  ($03),a									; MB12421 data write
+0389   01A3 DB 03       	in   a,($03)									; MB12421 data read
+0390   01A5 77          	ld   (hl),a										; Final write
+0391   01A6 01 20 00    	ld   bc,$0020									; Row increment
+0392   01A9 E1          	pop  hl
+0393   01AA 09          	add  hl,bc										; Next row
+0394   01AB C1          	pop  bc
+0395   01AC 7D          	ld   a,l
+0396   01AD E6 E0       	and  $E0
+0397   01AF C2 92 01    	jp   nz,L0192									; Not bottom of screen
+0398   01B2 7C          	ld   a,h
+0399   01B3 1F          	rra
+0400   01B4 DA 92 01    	jp   c,L0192									; Not end of screen
+0401   01B7 C9          	ret
+0402   01B8             
+0403   01B8             				;; Finish sprite draw
+0404   01B8             L01B8:
+0405   01B8 C5          	push bc
+0406   01B9 E5          	push hl
+0407   01BA             L01BA:
+0408   01BA 1A          	ld   a,(de)
+0409   01BB 13          	inc  de
+0410   01BC D3 03       	out  ($03),a									; Shifter input
+0411   01BE DB 00       	in   a,($00)									; Shifter output
+0412   01C0 77          	ld   (hl),a										; Write to screen
+0413   01C1 2B          	dec  hl
+0414   01C2 0D          	dec  c
+0415   01C3 C2 BA 01    	jp   nz,L01BA									; Loop for row
+0416   01C6             	
+0417   01C6 AF          	xor  a
+0418   01C7 D3 03       	out  ($03),a									; Shifter input 
+0419   01C9 DB 00       	in   a,($00)									; Shifter output
+0420   01CB 77          	ld   (hl),a										; Write to screen
+0421   01CC 01 20 00    	ld   bc,$0020									; Next line
+0422   01CF E1          	pop  hl
+0423   01D0 09          	add  hl,bc
+0424   01D1 C1          	pop  bc
+0425   01D2 7D          	ld   a,l
+0426   01D3 E6 E0       	and  $E0
+0427   01D5 C2 B8 01    	jp   nz,L01B8									; Loop
+0428   01D8             	
+0429   01D8 7C          	ld   a,h
+0430   01D9 1F          	rra
+0431   01DA DA B8 01    	jp   c,L01B8									; Loop
+0432   01DD C9          	ret
+0433   01DE             
+0434   01DE             					;; 
+0435   01DE             L01DE:
+0436   01DE 7E          	ld   a,(hl)
+0437   01DF A7          	and  a
+0438   01E0 F0          	ret  p												; High bit clear = inactive
+0439   01E1             	
+0440   01E1 E5          	push hl
+0441   01E2 23          	inc  hl												; hl now delta X
+0442   01E3 E6 07       	and  $07											; Mask low 3 bits 
+0443   01E5 C2 ED 01    	jp   nz,L01ED									; (is a ship)
+0444   01E8             
+0445   01E8             				;; This is a missle?
+0446   01E8 23          	inc  hl
+0447   01E9 23          	inc  hl
+0448   01EA C3 37 02    	jp   L0237
+0449   01ED             	
+0450   01ED             L01ED:
+0451   01ED 7E          	ld   a,(hl)										; Delta X
+0452   01EE 11 5F 21    	ld   de,$215F									; Table for +
+0453   01F1 A7          	and  a
+0454   01F2 F2 F8 01    	jp   p,L01F8
+0455   01F5             	
+0456   01F5 11 81 21    	ld   de,$2181									; Table for -
+0457   01F8             	
+0458   01F8             L01F8:
+0459   01F8 47          	ld   b,a											; b = delta x
+0460   01F9 23          	inc  hl												; (hl) = X
+0461   01FA 86          	add  a,(hl)										; a = x + dx
+0462   01FB 77          	ld   (hl),a										; store x
+0463   01FC 78          	ld   a,b											; a = delta X
+0464   01FD A7          	and  a
+0465   01FE 7E          	ld   a,(hl)										; a = X
+0466   01FF F2 10 02    	jp   p,L0210									; (left to right)
+0467   0202             	
+0468   0202 FE 01       	cp   $01
+0469   0204 D2 16 02    	jp   nc,L0216
+0470   0207             	
+0471   0207             L0207:
+0472   0207 E3          	ex   (sp),hl
+0473   0208 7E          	ld   a,(hl)
+0474   0209 E6 BF       	and  $BF											; Clear bit 5 (Ship done?)
+0475   020B 77          	ld   (hl),a
+0476   020C E3          	ex   (sp),hl
+0477   020D C3 16 02    	jp   L0216
+0478   0210             	
+0479   0210             L0210:
+0480   0210 23          	inc  hl
+0481   0211 BE          	cp   (hl)											; End X
+0482   0212 2B          	dec  hl
+0483   0213 D2 07 02    	jp   nc,L0207
+0484   0216             				
+0485   0216             L0216:
+0486   0216 7E          	ld   a,(hl)
+0487   0217 0F          	rrca
+0488   0218 0F          	rrca
+0489   0219 0F          	rrca
+0490   021A E6 1F       	and  $1F
+0491   021C 83          	add  a,e
+0492   021D 5F          	ld   e,a
+0493   021E E3          	ex   (sp),hl
+0494   021F 7E          	ld   a,(hl)
+0495   0220 E3          	ex   (sp),hl
+0496   0221 E6 07       	and  $07
+0497   0223 47          	ld   b,a
+0498   0224 23          	inc  hl
+0499   0225 7E          	ld   a,(hl)
+0500   0226 2F          	cpl
+0501   0227 3C          	inc  a
+0502   0228 0F          	rrca
+0503   0229 0F          	rrca
+0504   022A 0F          	rrca
+0505   022B E6 07       	and  $07
+0506   022D C6 03       	add  a,$03
+0507   022F EB          	ex   de,hl
+0508   0230             L0230:
+0509   0230 70          	ld   (hl),b
+0510   0231 23          	inc  hl
+0511   0232 3D          	dec  a
+0512   0233 C2 30 02    	jp   nz,L0230
+0513   0236 EB          	ex   de,hl
+0514   0237             
+0515   0237             				;; Handle missiles?
+0516   0237             L0237:
+0517   0237 11 2F 20    	ld   de,$202F
+0518   023A 1A          	ld   a,(de)
+0519   023B 2F          	cpl
+0520   023C 12          	ld   (de),a
+0521   023D C2 47 02    	jp   nz,L0247
+0522   0240 23          	inc  hl
+0523   0241 7E          	ld   a,(hl)
+0524   0242 23          	inc  hl
+0525   0243 86          	add  a,(hl)
+0526   0244 77          	ld   (hl),a
+0527   0245 23          	inc  hl
+0528   0246 BE          	cp   (hl)
+0529   0247             L0247:
+0530   0247 E1          	pop  hl
+0531   0248 37          	scf
+0532   0249 C0          	ret  nz
+0533   024A 7E          	ld   a,(hl)
+0534   024B E6 BF       	and  $BF
+0535   024D 77          	ld   (hl),a
+0536   024E 37          	scf
+0537   024F C9          	ret
+0538   0250             L0250:
+0539   0250 7E          	ld   a,(hl)
+0540   0251 A7          	and  a
+0541   0252 F0          	ret  p
+0542   0253 E5          	push hl
+0543   0254 23          	inc  hl
+0544   0255 23          	inc  hl
+0545   0256 4E          	ld   c,(hl)
+0546   0257 23          	inc  hl
+0547   0258 23          	inc  hl
+0548   0259 7E          	ld   a,(hl)
+0549   025A 23          	inc  hl
+0550   025B 46          	ld   b,(hl)
+0551   025C 80          	add  a,b
+0552   025D 77          	ld   (hl),a
+0553   025E 78          	ld   a,b
+0554   025F FE C0       	cp   $C0
+0555   0261 D2 09 03    	jp   nc,L0309
+0556   0264 FE 30       	cp   $30
+0557   0266 D2 75 02    	jp   nc,L0275
+0558   0269 3A 24 20    	ld   a,($2024)
+0559   026C A7          	and  a
+0560   026D CA 75 02    	jp   z,L0275
+0561   0270 3C          	inc  a
+0562   0271 3C          	inc  a
+0563   0272 32 24 20    	ld   ($2024),a
+0564   0275             L0275:
+0565   0275 7E          	ld   a,(hl)
+0566   0276 23          	inc  hl
+0567   0277 BE          	cp   (hl)
+0568   0278 D2 9C 02    	jp   nc,L029C
+0569   027B 3E C0       	ld   a,$C0
+0570   027D 86          	add  a,(hl)
+0571   027E 77          	ld   (hl),a
+0572   027F 2B          	dec  hl
+0573   0280 2B          	dec  hl
+0574   0281 34          	inc  (hl)
+0575   0282 34          	inc  (hl)
+0576   0283 7E          	ld   a,(hl)
+0577   0284 23          	inc  hl
+0578   0285 23          	inc  hl
+0579   0286 23          	inc  hl
+0580   0287 CA 96 02    	jp   z,L0296
+0581   028A 36 88       	ld   (hl),SHOT1&$ff										; Change missile to SHOT1
+0582   028C FE FC       	cp   $FC
+0583   028E CA 9C 02    	jp   z,L029C
+0584   0291 36 98       	ld   (hl),SHOT2&$ff										; Change missile to SHOT2
+0585   0293 C3 9C 02    	jp   L029C
+0586   0296             				
+0587   0296             L0296:
+0588   0296 E3          	ex   (sp),hl
+0589   0297 7E          	ld   a,(hl)
+0590   0298 E6 BF       	and  $BF															; Clear bit 5 
+0591   029A 77          	ld   (hl),a
+0592   029B E3          	ex   (sp),hl
+0593   029C             				
+0594   029C             L029C:
+0595   029C 11 30 20    	ld   de,$2030
+0596   029F 1A          	ld   a,(de)
+0597   02A0 A7          	and  a
+0598   02A1 C2 09 03    	jp   nz,L0309
+0599   02A4             				
+0600   02A4 3C          	inc  a
+0601   02A5 12          	ld   (de),a
+0602   02A6 78          	ld   a,b
+0603   02A7 E6 10       	and  $10
+0604   02A9 CA 09 03    	jp   z,L0309
+0605   02AC 11 07 00    	ld   de,$0007
+0606   02AF 19          	add  hl,de
+0607   02B0 7E          	ld   a,(hl)
+0608   02B1 A7          	and  a
+0609   02B2 C2 C3 02    	jp   nz,L02C3
+0610   02B5 19          	add  hl,de
+0611   02B6 78          	ld   a,b
+0612   02B7 83          	add  a,e
+0613   02B8 47          	ld   b,a
+0614   02B9 E6 10       	and  $10
+0615   02BB CA 09 03    	jp   z,L0309
+0616   02BE 7E          	ld   a,(hl)
+0617   02BF A7          	and  a
+0618   02C0 CA 09 03    	jp   z,L0309
+0619   02C3             L02C3:
+0620   02C3 E3          	ex   (sp),hl
+0621   02C4 7E          	ld   a,(hl)
+0622   02C5 E6 BF       	and  $BF
+0623   02C7 77          	ld   (hl),a
+0624   02C8 E3          	ex   (sp),hl
+0625   02C9 78          	ld   a,b
+0626   02CA D6 40       	sub  $40
+0627   02CC 47          	ld   b,a
+0628   02CD DA E0 02    	jp   c,L02E0
+0629   02D0 21 A1 21    	ld   hl,$21A1
+0630   02D3             L02D3:
+0631   02D3 23          	inc  hl
+0632   02D4 23          	inc  hl
+0633   02D5 7E          	ld   a,(hl)
+0634   02D6 A7          	and  a
+0635   02D7 C2 D3 02    	jp   nz,L02D3
+0636   02DA 70          	ld   (hl),b
+0637   02DB 23          	inc  hl
+0638   02DC 71          	ld   (hl),c
+0639   02DD C3 09 03    	jp   L0309
+0640   02E0             L02E0:
+0641   02E0 21 BE 21    	ld   hl,$21BE
+0642   02E3             L02E3:
+0643   02E3 23          	inc  hl
+0644   02E4 23          	inc  hl
+0645   02E5 23          	inc  hl
+0646   02E6 7E          	ld   a,(hl)
+0647   02E7 A7          	and  a
+0648   02E8 C2 E3 02    	jp   nz,L02E3
+0649   02EB 78          	ld   a,b
+0650   02EC C6 20       	add  a,$20
+0651   02EE 11 60 21    	ld   de,$2160
+0652   02F1 FA F7 02    	jp   m,L02F7
+0653   02F4 11 82 21    	ld   de,$2182
+0654   02F7             L02F7:
+0655   02F7 79          	ld   a,c
+0656   02F8 0F          	rrca
+0657   02F9 0F          	rrca
+0658   02FA 0F          	rrca
+0659   02FB E6 1F       	and  $1F
+0660   02FD 83          	add  a,e
+0661   02FE 5F          	ld   e,a
+0662   02FF 1A          	ld   a,(de)
+0663   0300 A7          	and  a
+0664   0301 CA 09 03    	jp   z,L0309
+0665   0304 77          	ld   (hl),a
+0666   0305 23          	inc  hl
+0667   0306 71          	ld   (hl),c
+0668   0307 23          	inc  hl
+0669   0308 70          	ld   (hl),b
+0670   0309             L0309:
+0671   0309 37          	scf
+0672   030A E1          	pop  hl
+0673   030B C9          	ret
+0674   030C             
+0675   030C             				
+0676   030C             				;; hl = Ship pointer
+0677   030C             L030C:
+0678   030C 7E          	ld   a,(hl)										; Sprite flags
+0679   030D A7          	and  a
+0680   030E F0          	ret  p												; Return if high bit not set
+0681   030F             	
+0682   030F E6 20       	and  $20
+0683   0311 C8          	ret  z												; Bit 5 clear = not active
+0684   0312             	
+0685   0312 CD 5B 03    	call $035B										; Get de, bc from bytes 9-d
+0686   0315             	
+0687   0315 EB          	ex   de,hl										; hl = read de
+0688   0316 41          	ld   b,c
+0689   0317             L0317:
+0690   0317 AF          	xor  a
+0691   0318 E5          	push hl												; Store loc
+0692   0319             
+0693   0319             				;; Clear c bytes
+0694   0319             L0319:
+0695   0319 77          	ld   (hl),a
+0696   031A 23          	inc  hl
+0697   031B 0D          	dec  c
+0698   031C C2 19 03    	jp   nz,L0319
+0699   031F             	
+0700   031F 11 20 00    	ld   de,$0020
+0701   0322 E1          	pop  hl												; Get loc
+0702   0323 19          	add  hl,de										; Next line
+0703   0324 48          	ld   c,b
+0704   0325 7D          	ld   a,l
+0705   0326 E6 E0       	and  $E0
+0706   0328 C2 17 03    	jp   nz,L0317									; Loop
+0707   032B 7C          	ld   a,h
+0708   032C 1F          	rra
+0709   032D DA 17 03    	jp   c,L0317									; Loop
+0710   0330 C9          	ret
+0711   0331             
+0712   0331             	
+0713   0331             L0331:
+0714   0331 2A 14 20    	ld   hl,($2014)
+0715   0334 06 0A       	ld   b,$0A										; Loop counter
+0716   0336 7D          	ld   a,l
+0717   0337 B4          	or   h
+0718   0338 C2 3E 03    	jp   nz,L033E
+0719   033B 21 72 20    	ld   hl,$2072									; Reset to $2072
+0720   033E             L033E:
+0721   033E 11 0D 00    	ld   de,$000D
+0722   0341             L0341:
+0723   0341 19          	add  hl,de
+0724   0342 05          	dec  b
+0725   0343 C8          	ret  z												; End of loop
+0726   0344             	
+0727   0344 7D          	ld   a,l
+0728   0345 FE E7       	cp   $E7											; hl == $20E7?
+0729   0347 C2 4D 03    	jp   nz,L034D
+0730   034A             	
+0731   034A 21 7F 20    	ld   hl,$207F									; Reset to $207F
+0732   034D             L034D:
+0733   034D 7E          	ld   a,(hl)										; X flags
+0734   034E A7          	and  a
+0735   034F F2 41 03    	jp   p,L0341									; MSB clear?
+0736   0352             	
+0737   0352 22 14 20    	ld   ($2014),hl
+0738   0355 23          	inc  hl
+0739   0356 7E          	ld   a,(hl)										; Delta X
+0740   0357 23          	inc  hl
+0741   0358 86          	add  a,(hl)										; Add to X
+0742   0359 77          	ld   (hl),a										; Store X
+0743   035A C9          	ret
+0744   035B             
+0745   035B             				;; Load de, bc from ship data
+0746   035B             L035B:
+0747   035B 11 09 00    	ld   de,$0009
+0748   035E 19          	add  hl,de
+0749   035F 5E          	ld   e,(hl)
+0750   0360 23          	inc  hl
+0751   0361 56          	ld   d,(hl)
+0752   0362 23          	inc  hl
+0753   0363 4E          	ld   c,(hl)
+0754   0364 23          	inc  hl
+0755   0365 46          	ld   b,(hl)
+0756   0366 23          	inc  hl
+0757   0367 C9          	ret
+0758   0368             
+0759   0368             				;; Called from ISR
+0760   0368             L0368:
+0761   0368 3A 20 20    	ld   a,($2020)
+0762   036B A7          	and  a
+0763   036C C0          	ret  nz
+0764   036D 47          	ld   b,a											; No ret, so a=0, b=0
+0765   036E 21 03 20    	ld   hl,$2003									; Counter address
+0766   0371 35          	dec  (hl)											; Decrement counter
+0767   0372 C2 8E 03    	jp   nz,L038E
+0768   0375             
+0769   0375             				;; $2003 Counter zero
+0770   0375 36 1E       	ld   (hl),$1E									; Reset counter
+0771   0377 21 02 20    	ld   hl,$2002									; Game timer
+0772   037A 7E          	ld   a,(hl)				
+0773   037B A7          	and  a
+0774   037C CA 88 03    	jp   z,L0388									; Game over
+0775   037F             				
+0776   037F C6 99       	add  a,$99
+0777   0381 27          	daa
+0778   0382 77          	ld   (hl),a										; Decrement game timer
+0779   0383 C2 88 03    	jp   nz,L0388
+0780   0386             				
+0781   0386 06 01       	ld   b,$01										; set d7 (eventually) = Game over
+0782   0388             				
+0783   0388             L0388:
+0784   0388 21 10 20    	ld   hl,$2010
+0785   038B CD AE 03    	call L03AE										; Handle $2010 timer d6
+0786   038E             
+0787   038E             				;; Counter non-zero
+0788   038E             L038E:
+0789   038E 21 11 20    	ld   hl,$2011 			
+0790   0391 CD AE 03    	call L03AE										; Handle $2011 timer d5
+0791   0394 21 21 20    	ld   hl,$2021
+0792   0397 CD AE 03    	call L03AE										; Handle $2021 timer d4
+0793   039A 23          	inc  hl
+0794   039B CD AE 03    	call L03AE										; Handle $2022 timer d3
+0795   039E 23          	inc  hl
+0796   039F CD AE 03    	call L03AE										; Handle $2023 timer d2
+0797   03A2 23          	inc  hl
+0798   03A3 CD AE 03    	call L03AE										; Handle $2024 timer d1
+0799   03A6 23          	inc  hl
+0800   03A7 CD AE 03    	call L03AE										; Handle $2025 timer d0
+0801   03AA 32 20 20    	ld   ($2020),a
+0802   03AD C9          	ret
+0803   03AE             
+0804   03AE             				;; Decrement timer, set bit if 0
+0805   03AE             L03AE:
+0806   03AE 7E          	ld   a,(hl)
+0807   03AF A7          	and  a
+0808   03B0 CA B8 03    	jp   z,L03B8
+0809   03B3 35          	dec  (hl)
+0810   03B4 C2 B8 03    	jp   nz,L03B8
+0811   03B7 37          	scf														; Set carry
+0812   03B8             	
+0813   03B8             				;; Shift 0 into b unless carry set above
+0814   03B8             L03B8:
+0815   03B8 78          	ld   a,b			
+0816   03B9 17          	rla
+0817   03BA 47          	ld   b,a
+0818   03BB C9          	ret
+0819   03BC             
+0820   03BC             				;; Called from both interrupt routines
+0821   03BC             				;; Updates and redraw "wave"
+0822   03BC             L03BC:
+0823   03BC 01 27 20    	ld   bc,$2027
+0824   03BF 0A          	ld   a,(bc)
+0825   03C0 C6 0A       	add  a,$0A										; $00 -> $0A -> $14 -> $1E = $00
+0826   03C2 FE 1E       	cp   $1E
+0827   03C4 C2 C8 03    	jp   nz,L03C8
+0828   03C7 AF          	xor  a
+0829   03C8             L03C8:
+0830   03C8 02          	ld   (bc),a										; Store state
+0831   03C9             	
+0832   03C9 03          	inc  bc												; $2028
+0833   03CA 5F          	ld   e,a
+0834   03CB 16 00       	ld   d,$00
+0835   03CD 21 F3 0B    	ld   hl,WATER0								; Start of waves
+0836   03D0 19          	add  hl,de
+0837   03D1 EB          	ex   de,hl										; de = wave table entry
+0838   03D2             
+0839   03D2 0A          	ld   a,(bc)
+0840   03D3 3C          	inc  a
+0841   03D4 E6 1F       	and  $1F											; Loops $00 to $1F
+0842   03D6 02          	ld   (bc),a
+0843   03D7             
+0844   03D7             				;; Screen location
+0845   03D7 21 E0 27    	ld   hl,$27E0
+0846   03DA 85          	add  a,l
+0847   03DB 6F          	ld   l,a
+0848   03DC 01 20 00    	ld   bc,$0020									; Next char
+0849   03DF             L03DF:
+0850   03DF 1A          	ld   a,(de)										; Get byte
+0851   03E0 13          	inc  de
+0852   03E1 77          	ld   (hl),a										; Write byte
+0853   03E2 09          	add  hl,bc										; Next char
+0854   03E3 7D          	ld   a,l
+0855   03E4 E6 E0       	and  $E0
+0856   03E6 FE 60       	cp   $60
+0857   03E8 C2 DF 03    	jp   nz,L03DF									; Loop	
+0858   03EB C9          	ret
+0859   03EC             
+0860   03EC             				;; Test mode
+0861   03EC             L03EC:
+0862   03EC 21 00 00    	ld   hl,L0000									; Start address
+0863   03EF 11 00 00    	ld   de,$0000									; Offset 0
+0864   03F2 0E 02       	ld   c,$02										; Until $200
+0865   03F4             L03F4:
+0866   03F4 AF          	xor  a
+0867   03F5             L03F5:
+0868   03F5 86          	add  a,(hl)
+0869   03F6 23          	inc  hl
+0870   03F7 47          	ld   b,a
+0871   03F8 79          	ld   a,c
+0872   03F9 BC          	cp   h
+0873   03FA 78          	ld   a,b
+0874   03FB C2 F5 03    	jp   nz,L03F5									; Loop
+0875   03FE             	
+0876   03FE E5          	push hl												; Push address
+0877   03FF             	
+0878   03FF 21 29 04    	ld   hl,L0429									; Checksum table
+0879   0402 19          	add  hl,de
+0880   0403 BE          	cp   (hl)											; Compare checksum
+0881   0404 3E 40       	ld   a,$40										; (Space)
+0882   0406 CA 0E 04    	jp   z,L040E
+0883   0409 21 32 04    	ld   hl,L0432
+0884   040C 19          	add  hl,de
+0885   040D 7E          	ld   a,(hl)
+0886   040E             L040E:
+0887   040E 21 E9 21    	ld   hl,$21E9									; Base screen loc
+0888   0411 19          	add  hl,de
+0889   0412 77          	ld   (hl),a										; Store char
+0890   0413             	
+0891   0413 E1          	pop  hl												; Get address back
+0892   0414 13          	inc  de												; Next rom
+0893   0415 0C          	inc  c												; $2 more pages
+0894   0416 0C          	inc  c
+0895   0417 3E 12       	ld   a,$12
+0896   0419 B9          	cp   c
+0897   041A C2 F4 03    	jp   nz,L03F4									; Loop if not done
+0898   041D             	
+0899   041D 21 E9 21    	ld   hl,$21E9
+0900   0420 11 08 30    	ld   de,$3008
+0901   0423 3E 08       	ld   a,$08
+0902   0425 CD 30 0B    	call $0B30										; Draw string hl @ de, length a
+0903   0428 76          	halt													; Stop!
+0904   0429             
+0905   0429             				;; $200 block checksums
+0906   0429             L0429:
+0907   0429 8D 79 00 1F 	.db	$8D, $79, $00, $1F, $58, $6D, $EA, $C5		; Checksum 
+0907   042D 58 6D EA C5 
+0908   0431             	
+0909   0431 2A          	.db	$2A		; Patch byte for $400 checksum
+0910   0432             
+0911   0432             				;; Error locations
+0912   0432             L0432:
+0913   0432 48 48 47 47 	.db	$48, $48, $47, $47, $46, $46, $45, $45		; HHGGFFEE
+0913   0436 46 46 45 45 
+0914   043A             
+0915   043A             				;; Initial jump
+0916   043A             L043A:
+0917   043A CD A2 08    	call L08A2										; (End of game routine)
+0918   043D DB 02       	in   a,($02)									; IN2
+0919   043F E6 E0       	and  $E0											; Test mode bits
+0920   0441 FE E0       	cp   $E0
+0921   0443 CC EC 03    	call z,L03EC									; Go to test mode
+0922   0446             
+0923   0446             				;; Clear $2002-$200a
+0924   0446 21 02 20    	ld   hl,$2002
+0925   0449 3E 09       	ld   a,$09
+0926   044B 06 00       	ld   b,$00
+0927   044D             L044D:
+0928   044D 70          	ld   (hl),b
+0929   044E 23          	inc  hl
+0930   044F 3D          	dec  a
+0931   0450 C2 4D 04    	jp   nz,L044D
+0932   0453             	
+0933   0453 21 29 09    	ld   hl,L0929
+0934   0456 22 00 20    	ld   ($2000),hl
+0935   0459             L0459:
+0936   0459 FB          	ei														; Enable interrupts
+0937   045A             	
+0938   045A 21 59 04    	ld   hl,L0459									; Return address
+0939   045D E5          	push hl
+0940   045E 2A 00 20    	ld   hl,($2000)
+0941   0461 7E          	ld   a,(hl)
+0942   0462 A7          	and  a
+0943   0463 C2 7D 04    	jp   nz,L047D
+0944   0466             
+0945   0466             				;; a=(($2000)) == 0
+0946   0466 CD A4 06    	call L06A4
+0947   0469 CD CE 04    	call L04CE
+0948   046C CD BF 04    	call L04BF
+0949   046F 3A 02 20    	ld   a,($2002)								; Game timer
+0950   0472 A7          	and  a
+0951   0473 C8          	ret  z												; Skip rest if game over
+0952   0474             	
+0953   0474 CD 4C 07    	call L074C
+0954   0477 CD B8 08    	call L08B8
+0955   047A C3 8C 04    	jp   L048C
+0956   047D             
+0957   047D             				;; a=(($2000)) != 0
+0958   047D             L047D:
+0959   047D 23          	inc  hl
+0960   047E EB          	ex   de,hl										; ($2000+1) --> de
+0961   047F 21 E8 09    	ld   hl,TBLJMP-2							; Jump table
+0962   0482 07          	rlca													; a = ($2000)<<1
+0963   0483 4F          	ld   c,a											; c = ($2000)<<1
+0964   0484 06 00       	ld   b,$00
+0965   0486 09          	add  hl,bc										; hl = L09e8 + ($2000)<<1
+0966   0487 7E          	ld   a,(hl)
+0967   0488 23          	inc  hl
+0968   0489 66          	ld   h,(hl)
+0969   048A 6F          	ld   l,a
+0970   048B E9          	jp   (hl)
+0971   048C             	
+0972   048C             L048C:
+0973   048C 3A 03 20    	ld   a,($2003)
+0974   048F FE 1D       	cp   $1D
+0975   0491 F8          	ret  m
+0976   0492 01 02 20    	ld   bc,$2002
+0977   0495 11 E9 21    	ld   de,$21E9
+0978   0498 CD 82 0A    	call L0A82
+0979   049B EB          	ex   de,hl
+0980   049C CD 7A 0A    	call L0A7A
+0981   049F 23          	inc  hl
+0982   04A0 36 2C       	ld   (hl),$2C
+0983   04A2 23          	inc  hl
+0984   04A3 EB          	ex   de,hl
+0985   04A4 01 2B 20    	ld   bc,$202B									; Player score
+0986   04A7 CD 82 0A    	call L0A82										; Draw score digits
+0987   04AA EB          	ex   de,hl
+0988   04AB CD 7A 0A    	call L0A7A
+0989   04AE 23          	inc  hl
+0990   04AF 36 30       	ld   (hl),$30
+0991   04B1 23          	inc  hl
+0992   04B2 36 30       	ld   (hl),$30
+0993   04B4 21 E9 21    	ld   hl,$21E9
+0994   04B7 11 2F 3E    	ld   de,$3E2F
+0995   04BA 3E 06       	ld   a,$06
+0996   04BC C3 30 0B    	jp   $0B30										; Draw string hl @ de, length a
+0997   04BF             L04BF:
+0998   04BF 21 2A 20    	ld   hl,$202A
+0999   04C2 7E          	ld   a,(hl)
+1000   04C3 A7          	and  a
+1001   04C4 C8          	ret  z
+1002   04C5 36 00       	ld   (hl),$00
+1003   04C7 21 A6 09    	ld   hl,L09A6
+1004   04CA 22 00 20    	ld   ($2000),hl
+1005   04CD C9          	ret
+1006   04CE             
+1007   04CE             				;; Choose subroutine based on $2020 bits
+1008   04CE             L04CE:
+1009   04CE 21 20 20    	ld   hl,$2020
+1010   04D1 7E          	ld   a,(hl)
+1011   04D2 A7          	and  a
+1012   04D3 C8          	ret  z												; Nothing to do
+1013   04D4 36 00       	ld   (hl),$00									; Clear all bits
+1014   04D6 1F          	rra
+1015   04D7 DC 01 06    	call c,L0601									; Bit 0 set = Clear explosion lights
+1016   04DA 1F          	rra
+1017   04DB DC 0E 06    	call c,L060E									; Bit 1 set = Clear explosion on screen
+1018   04DE 1F          	rra
+1019   04DF DC F7 04    	call c,L04F7									; Bit 2 set = Trigger bit 2 sound	
+1020   04E2 1F          	rra
+1021   04E3 DC 34 06    	call c,L0634									; Bit 3 set = Launch new ship
+1022   04E6 1F          	rra
+1023   04E7 DC E9 05    	call c,L05E9									; Bit 4 set = Reload torpedos
+1024   04EA 1F          	rra
+1025   04EB DC 73 05    	call c,L0573									; Bit 5 set = Increment $2000 counter
+1026   04EE 1F          	rra
+1027   04EF DC 6C 05    	call c,L056C									; Bit 6 set = Initialize $2000 counter
+1028   04F2 1F          	rra
+1029   04F3 DC 11 05    	call c,L0511									; Bit 7 set = Game time over
+1030   04F6 C9          	ret
+1031   04F7             
+1032   04F7             				;; Bit 2 set on $2020
+1033   04F7             				;; Trigger bit 2 sound and set timers
+1034   04F7             L04F7:
+1035   04F7 F5          	push af
+1036   04F8 21 26 20    	ld   hl,$2026
+1037   04FB 7E          	ld   a,(hl)
+1038   04FC A7          	and  a
+1039   04FD CA 0F 05    	jp   z,L050F									; Do nothing
+1040   0500             	
+1041   0500 35          	dec  (hl)
+1042   0501 3E 04       	ld   a,$04
+1043   0503 D3 05       	out  ($05),a									; Audio outputs
+1044   0505 3E 19       	ld   a,$19
+1045   0507 32 23 20    	ld   ($2023),a								; Set timer
+1046   050A 3E 0F       	ld   a,$0F
+1047   050C 32 25 20    	ld   ($2025),a								; Set timer
+1048   050F             L050F:
+1049   050F F1          	pop  af
+1050   0510 C9          	ret
+1051   0511             
+1052   0511             				;; Bit 7 set on $2020
+1053   0511             L0511:
+1054   0511 21 2E 20    	ld   hl,$202E
+1055   0514 7E          	ld   a,(hl)
+1056   0515 A7          	and  a
+1057   0516 C2 3D 05    	jp   nz,L053D									; Jump if already extended time
+1058   0519             	
+1059   0519 36 01       	ld   (hl),$01									; Only 1 extend
+1060   051B 3A 07 20    	ld   a,($2007)								; Last IN1
+1061   051E 0F          	rrca
+1062   051F E6 70       	and  $70											; Base score for extended time (00 = none)
+1063   0521 CA 3D 05    	jp   z,L053D									; Jump if no extended time
+1064   0524             	
+1065   0524 C6 09       	add  a,$09										; $20 dip = $19(00) score
+1066   0526 21 2B 20    	ld   hl,$202B									; Player score
+1067   0529 BE          	cp   (hl)
+1068   052A D2 3D 05    	jp   nc,L053D									; Jump if score lower than metric
+1069   052D             	
+1070   052D 3E 20       	ld   a,$20	
+1071   052F 32 02 20    	ld   ($2002),a								; Set game time
+1072   0532 21 33 0F    	ld   hl,LTEXT									; EXTENDED_TIME
+1073   0535 11 03 3C    	ld   de,$3C03
+1074   0538 3E 0C       	ld   a,$0C
+1075   053A C3 30 0B    	jp   $0B30										; Draw string hl @ de, length a
+1076   053D             	
+1077   053D             L053D:
+1078   053D 21 C9 20    	ld   hl,$20C9
+1079   0540 01 1E 00    	ld   bc,$001E
+1080   0543             L0543:
+1081   0543 09          	add  hl,bc
+1082   0544 7D          	ld   a,l
+1083   0545 FE 5F       	cp   $5F
+1084   0547 CA 5C 05    	jp   z,L055C
+1085   054A             	
+1086   054A 7E          	ld   a,(hl)
+1087   054B A7          	and  a
+1088   054C F2 43 05    	jp   p,L0543
+1089   054F             	
+1090   054F AF          	xor  a
+1091   0550 32 21 20    	ld   ($2021),a
+1092   0553 32 2D 20    	ld   ($202D),a 		; Torpedo status
+1093   0556 3E 01       	ld   a,$01
+1094   0558 32 02 20    	ld   ($2002),a
+1095   055B C9          	ret
+1096   055C             	
+1097   055C             L055C:
+1098   055C 21 29 09    	ld   hl,L0929
+1099   055F 22 00 20    	ld   ($2000),hl
+1100   0562 3A 2B 20    	ld   a,($202B)								; Player score
+1101   0565 21 06 20    	ld   hl,$2006									; High score
+1102   0568 BE          	cp   (hl)
+1103   0569 D8          	ret  c
+1104   056A 77          	ld   (hl),a										; Write new score
+1105   056B C9          	ret
+1106   056C             
+1107   056C             				;; Bit 6 set on $2020
+1108   056C             				;; Initialize $2000 counter
+1109   056C             L056C:
+1110   056C 21 63 09    	ld   hl,L0963
+1111   056F 22 00 20    	ld   ($2000),hl
+1112   0572 C9          	ret
+1113   0573             
+1114   0573             				;; Bit 5 set on $2020
+1115   0573             				;; Increment $2000 counter
+1116   0573             L0573:
+1117   0573 2A 00 20    	ld   hl,($2000)
+1118   0576 23          	inc  hl
+1119   0577 22 00 20    	ld   ($2000),hl
+1120   057A C9          	ret
+1121   057B             
+1122   057B             				;; Handle change in fire button
+1123   057B             HFIRE:
+1124   057B C8          	ret  z												; Not pressed
+1125   057C 3A 02 20    	ld   a,($2002)								; Game timer
+1126   057F A7          	and  a	
+1127   0580 C8          	ret  z												; Not in game mode
+1128   0581             	
+1129   0581 3A 21 20    	ld   a,($2021)
+1130   0584 A7          	and  a
+1131   0585 C0          	ret  nz												; Missile already active? 
+1132   0586             	
+1133   0586 21 2D 20    	ld   hl,$202D									; Torpedo status
+1134   0589 7E          	ld   a,(hl)
+1135   058A E6 1F       	and  $1F
+1136   058C C8          	ret  z												; ??
+1137   058D             	
+1138   058D 7E          	ld   a,(hl)
+1139   058E E6 0F       	and  $0F											; Mask torp bits
+1140   0590 1F          	rra
+1141   0591 06 20       	ld   b,$20										; Bit 5 = Reload
+1142   0593 A7          	and  a
+1143   0594 CA 99 05    	jp   z,L0599
+1144   0597             	
+1145   0597 06 10       	ld   b,$10										; Bit 4 = Ready
+1146   0599             L0599:
+1147   0599 B0          	or   b
+1148   059A 77          	ld   (hl),a
+1149   059B D3 02       	out  ($02),a									; Torpedo display
+1150   059D 21 21 20    	ld   hl,$2021
+1151   05A0 36 08       	ld   (hl),$08
+1152   05A2 E6 10       	and  $10
+1153   05A4 C2 A9 05    	jp   nz,L05A9
+1154   05A7             	
+1155   05A7 36 3C       	ld   (hl),$3C
+1156   05A9             L05A9:
+1157   05A9 3E 02       	ld   a,$02
+1158   05AB D3 05       	out  ($05),a									; Audio outputs
+1159   05AD 3E 0F       	ld   a,$0F
+1160   05AF 32 25 20    	ld   ($2025),a								; Set timer
+1161   05B2 21 C9 20    	ld   hl,$20C9
+1162   05B5 11 1E 00    	ld   de,$001E
+1163   05B8             L05B8:
+1164   05B8 19          	add  hl,de
+1165   05B9 7E          	ld   a,(hl)
+1166   05BA A7          	and  a
+1167   05BB FA B8 05    	jp   m,L05B8
+1168   05BE             	
+1169   05BE 11 08 00    	ld   de,$0008
+1170   05C1 19          	add  hl,de
+1171   05C2 36 0E       	ld   (hl),$0E
+1172   05C4 2B          	dec  hl
+1173   05C5 36 75       	ld   (hl),$75
+1174   05C7 2B          	dec  hl
+1175   05C8 36 9C       	ld   (hl),$9C
+1176   05CA 2B          	dec  hl
+1177   05CB 36 E0       	ld   (hl),$E0
+1178   05CD 2B          	dec  hl
+1179   05CE 36 FA       	ld   (hl),$FA
+1180   05D0 2B          	dec  hl
+1181   05D1 2B          	dec  hl
+1182   05D2 11 5E 0F    	ld   de,$0F5E									; Grey code table?
+1183   05D5 EB          	ex   de,hl
+1184   05D6 3A 08 20    	ld   a,($2008)
+1185   05D9 E6 1F       	and  $1F
+1186   05DB 4F          	ld   c,a
+1187   05DC 06 00       	ld   b,$00
+1188   05DE 09          	add  hl,bc
+1189   05DF 7E          	ld   a,(hl)
+1190   05E0 EB          	ex   de,hl
+1191   05E1 77          	ld   (hl),a
+1192   05E2 2B          	dec  hl
+1193   05E3 36 00       	ld   (hl),$00
+1194   05E5 2B          	dec  hl
+1195   05E6 36 C0       	ld   (hl),$C0
+1196   05E8 C9          	ret
+1197   05E9             
+1198   05E9             				;; Bit 4 set on $2020
+1199   05E9             				;; Reset torpedo status after reload
+1200   05E9             L05E9:
+1201   05E9 F5          	push af
+1202   05EA 21 2D 20    	ld   hl,$202D									; Torpedo status
+1203   05ED 7E          	ld   a,(hl)
+1204   05EE E6 10       	and  $10											; Check ready
+1205   05F0 C2 FF 05    	jp   nz,L05FF
+1206   05F3             	
+1207   05F3 3E 1F       	ld   a,$1F										; Reset torpedo status
+1208   05F5 D3 02       	out  ($02),a									; Torpedo lamps
+1209   05F7 77          	ld   (hl),a
+1210   05F8 3E 08       	ld   a,$08
+1211   05FA D3 05       	out  ($05),a									; Audio outputs
+1212   05FC CD EA 07    	call L07EA
+1213   05FF             L05FF:
+1214   05FF F1          	pop  af
+1215   0600 C9          	ret
+1216   0601             
+1217   0601             				;; Bit 0 set on $2020
+1218   0601             				;; Clear explosions
+1219   0601             L0601:
+1220   0601 F5          	push af
+1221   0602 AF          	xor  a
+1222   0603 D3 05       	out  ($05),a									; Audio outputs
+1223   0605 D3 01       	out  ($01),a									; Explosion lamp
+1224   0607 3A 2D 20    	ld   a,($202D)								; Torpedo status
+1225   060A D3 02       	out  ($02),a									; Periscope lamp
+1226   060C F1          	pop  af
+1227   060D C9          	ret
+1228   060E             
+1229   060E             				;; Bit 1 set on $2020
+1230   060E             L060E:
+1231   060E F5          	push af
+1232   060F 21 F0 21    	ld   hl,$21F0
+1233   0612             L0612:
+1234   0612 7E          	ld   a,(hl)
+1235   0613 A7          	and  a
+1236   0614 CA 32 06    	jp   z,L0632
+1237   0617             
+1238   0617             				;; ($21f0) -> de
+1239   0617 36 00       	ld   (hl),$00
+1240   0619 23          	inc  hl
+1241   061A 57          	ld   d,a
+1242   061B 5E          	ld   e,(hl)
+1243   061C 36 00       	ld   (hl),$00
+1244   061E 23          	inc  hl
+1245   061F FE 2C       	cp   $2C
+1246   0621 01 03 0A    	ld   bc,$0A03									; 10 x 3 byte area  (after ship hit)
+1247   0624 DA 2A 06    	jp   c,L062A
+1248   0627 01 05 20    	ld   bc,$2005									; 32 x 5 byte area  (after mine hit)
+1249   062A             L062A:
+1250   062A EB          	ex   de,hl
+1251   062B CD 3F 0A    	call L0A3F										; Clear area at hl
+1252   062E EB          	ex   de,hl
+1253   062F C3 12 06    	jp   L0612										; Repeat
+1254   0632             L0632:
+1255   0632 F1          	pop  af
+1256   0633 C9          	ret
+1257   0634             
+1258   0634             				;; Bit 3 set on $2020
+1259   0634             				;; Launch new ship
+1260   0634             L0634:
+1261   0634 F5          	push af
+1262   0635 3A 03 20    	ld   a,($2003)
+1263   0638 E6 0F       	and  $0F
+1264   063A F6 50       	or   $50
+1265   063C 32 22 20    	ld   ($2022),a 		; Set counter
+1266   063F             	
+1267   063F 01 29 20    	ld   bc,$2029									; Ship type loc
+1268   0642 0A          	ld   a,(bc)										; Get ship index
+1269   0643 3C          	inc  a												; Increment
+1270   0644 FE 07       	cp   $07											; Max = 6
+1271   0646 C2 4A 06    	jp   nz,L064A
+1272   0649 AF          	xor  a												; Set to 0
+1273   064A             L064A:
+1274   064A 02          	ld   (bc),a										; Store ship index
+1275   064B             	
+1276   064B 21 DE 0F    	ld   hl,L0FDE									; Ship type table
+1277   064E 85          	add  a,l
+1278   064F 6F          	ld   l,a
+1279   0650 7E          	ld   a,(hl)										; Get ship type
+1280   0651 47          	ld   b,a											; Stash in b
+1281   0652 FE 06       	cp   $06											; Is small / fast?
+1282   0654 C2 6B 06    	jp   nz,L066B									; No = jump
+1283   0657             	
+1284   0657 3E 04       	ld   a,$04
+1285   0659 D3 05       	out  ($05),a									; Audio outputs
+1286   065B 3E 19       	ld   a,$19
+1287   065D 32 23 20    	ld   ($2023),a								; Set timer
+1288   0660 3E 02       	ld   a,$02
+1289   0662 32 26 20    	ld   ($2026),a								; Set timer
+1290   0665 3E 0F       	ld   a,$0F
+1291   0667 32 25 20    	ld   ($2025),a								; Set timer
+1292   066A 78          	ld   a,b
+1293   066B             	
+1294   066B             				;; hl = $202c + $0d * a 
+1295   066B             L066B:
+1296   066B 21 2C 20    	ld   hl,$202C
+1297   066E 11 0D 00    	ld   de,$000D
+1298   0671             L0671:
+1299   0671 19          	add  hl,de
+1300   0672 3D          	dec  a
+1301   0673 C2 71 06    	jp   nz,L0671
+1302   0676             	
+1303   0676 78          	ld   a,b
+1304   0677 EB          	ex   de,hl
+1305   0678             	
+1306   0678 21 1E 20    	ld   hl,$201E									; Current ship move index
+1307   067B 7E          	ld   a,(hl)										; Read ship move index
+1308   067C 34          	inc  (hl)											; Increment ship move index
+1309   067D 21 7E 0F    	ld   hl,L0F7E									; Even ship move table?
+1310   0680 1F          	rra
+1311   0681 D2 8B 06    	jp   nc,L068B
+1312   0684             	
+1313   0684 21 AE 0F    	ld   hl,L0FAE									; Odd ship move table?
+1314   0687 78          	ld   a,b
+1315   0688 F6 10       	or   $10											; Set direction bit
+1316   068A 47          	ld   b,a
+1317   068B             	
+1318   068B             L068B:
+1319   068B 78          	ld   a,b
+1320   068C             
+1321   068C             				;; Index into ship type table
+1322   068C 3D          	dec  a												; a = 0-5 / 10-14
+1323   068D 07          	rlca
+1324   068E 07          	rlca
+1325   068F 07          	rlca
+1326   0690 E6 38       	and  $38											; Clear low bits
+1327   0692 85          	add  a,l
+1328   0693 6F          	ld   l,a
+1329   0694             
+1330   0694             				;; Copy ship table data
+1331   0694 0E 08       	ld   c,$08
+1332   0696             L0696:
+1333   0696 7E          	ld   a,(hl)
+1334   0697 23          	inc  hl
+1335   0698 12          	ld   (de),a
+1336   0699 1B          	dec  de
+1337   069A 0D          	dec  c
+1338   069B C2 96 06    	jp   nz,L0696
+1339   069E             	
+1340   069E 78          	ld   a,b
+1341   069F F6 C0       	or   $C0											; B7 = moving, B6 = don't clear, B5 = ??
+1342   06A1 12          	ld   (de),a										; Store ship type?
+1343   06A2 F1          	pop  af
+1344   06A3 C9          	ret
+1345   06A4             
+1346   06A4             				;; Called when (($2000)) == 0
+1347   06A4             L06A4:
+1348   06A4 21 C1 21    	ld   hl,$21C1
+1349   06A7             L06A7:
+1350   06A7 7E          	ld   a,(hl)
+1351   06A8 A7          	and  a
+1352   06A9 C8          	ret  z												; Skip if $21C1 = 00
+1353   06AA             	
+1354   06AA 36 00       	ld   (hl),$00									; Clear $21C1
+1355   06AC 23          	inc  hl
+1356   06AD 56          	ld   d,(hl)										; ($21C2) -> d
+1357   06AE E5          	push hl
+1358   06AF             
+1359   06AF             	;; hl = $2024 + $d * a
+1360   06AF 21 24 20    	ld   hl,$2024
+1361   06B2 01 0D 00    	ld   bc,$000D
+1362   06B5             L06B5:
+1363   06B5 09          	add  hl,bc
+1364   06B6 3D          	dec  a
+1365   06B7 C2 B5 06    	jp   nz,L06B5
+1366   06BA             	
+1367   06BA 01 08 00    	ld   bc,$0008
+1368   06BD 09          	add  hl,bc
+1369   06BE             	
+1370   06BE 36 0E       	ld   (hl),$0E
+1371   06C0 2B          	dec  hl
+1372   06C1 36 55       	ld   (hl),$55
+1373   06C3 2B          	dec  hl
+1374   06C4 2B          	dec  hl
+1375   06C5 2B          	dec  hl
+1376   06C6 36 01       	ld   (hl),$01
+1377   06C8 2B          	dec  hl
+1378   06C9 2B          	dec  hl
+1379   06CA 72          	ld   (hl),d
+1380   06CB 2B          	dec  hl
+1381   06CC 36 00       	ld   (hl),$00
+1382   06CE 2B          	dec  hl
+1383   06CF 46          	ld   b,(hl)
+1384   06D0 36 E0       	ld   (hl),$E0
+1385   06D2             	
+1386   06D2 3A 02 20    	ld   a,($2002)								; Ship hit score?
+1387   06D5 A7          	and  a
+1388   06D6 C2 DB 06    	jp   nz,L06DB
+1389   06D9 E1          	pop  hl
+1390   06DA C9          	ret
+1391   06DB             	
+1392   06DB             L06DB:
+1393   06DB 78          	ld   a,b
+1394   06DC 01 57 0F    	ld   bc,TSCORE-1							; Ship hit score table
+1395   06DF E6 07       	and  $07
+1396   06E1 81          	add  a,c
+1397   06E2 4F          	ld   c,a											; bc = index into table	
+1398   06E3             	
+1399   06E3 11 E9 21    	ld   de,$21E9
+1400   06E6 CD 82 0A    	call L0A82
+1401   06E9 3E 30       	ld   a,$30
+1402   06EB 12          	ld   (de),a
+1403   06EC 13          	inc  de
+1404   06ED 12          	ld   (de),a
+1405   06EE 0A          	ld   a,(bc)
+1406   06EF 21 2B 20    	ld   hl,$202B									; Player score
+1407   06F2 86          	add  a,(hl)										; Add a
+1408   06F3 27          	daa
+1409   06F4 77          	ld   (hl),a										; Store
+1410   06F5 E1          	pop  hl
+1411   06F6 4E          	ld   c,(hl)
+1412   06F7 23          	inc  hl
+1413   06F8 46          	ld   b,(hl)
+1414   06F9 23          	inc  hl
+1415   06FA E5          	push hl
+1416   06FB 78          	ld   a,b
+1417   06FC C6 20       	add  a,$20
+1418   06FE 21 C2 09    	ld   hl,L09C2									; Explosion lamp 0-7 table
+1419   0701 DA 07 07    	jp   c,L0707
+1420   0704 21 BA 09    	ld   hl,L09BA									; Explosion lamp 8-F table
+1421   0707             L0707:
+1422   0707 79          	ld   a,c
+1423   0708 07          	rlca
+1424   0709 07          	rlca
+1425   070A 07          	rlca
+1426   070B E6 07       	and  $07
+1427   070D 85          	add  a,l
+1428   070E 6F          	ld   l,a
+1429   070F 7E          	ld   a,(hl)
+1430   0710 D3 01       	out  ($01),a									; Explosion lamp
+1431   0712 3E 01       	ld   a,$01
+1432   0714 D3 05       	out  ($05),a									; Audio write
+1433   0716 3E 1E       	ld   a,$1E
+1434   0718 32 25 20    	ld   ($2025),a								; Set timer
+1435   071B 78          	ld   a,b
+1436   071C 16 24       	ld   d,$24
+1437   071E C6 20       	add  a,$20
+1438   0720 FA 25 07    	jp   m,L0725
+1439   0723 16 28       	ld   d,$28
+1440   0725             L0725:
+1441   0725 79          	ld   a,c
+1442   0726 0F          	rrca
+1443   0727 0F          	rrca
+1444   0728 0F          	rrca
+1445   0729 E6 1F       	and  $1F
+1446   072B CA 2F 07    	jp   z,L072F
+1447   072E 3D          	dec  a
+1448   072F             L072F:
+1449   072F FE 1E       	cp   $1E
+1450   0731 C2 35 07    	jp   nz,L0735
+1451   0734 3D          	dec  a
+1452   0735             L0735:
+1453   0735 F6 A0       	or   $A0
+1454   0737 5F          	ld   e,a
+1455   0738 CD DB 07    	call L07DB
+1456   073B 3E 2D       	ld   a,$2D
+1457   073D 32 24 20    	ld   ($2024),a
+1458   0740 21 EA 21    	ld   hl,$21EA
+1459   0743 3E 03       	ld   a,$03
+1460   0745 CD 30 0B    	call $0B30										; Draw string hl @ de, length a
+1461   0748 E1          	pop  hl
+1462   0749 C3 A7 06    	jp   L06A7
+1463   074C             	
+1464   074C             L074C:
+1465   074C 21 A3 21    	ld   hl,$21A3
+1466   074F             L074F:
+1467   074F 7E          	ld   a,(hl)
+1468   0750 A7          	and  a
+1469   0751 C8          	ret  z
+1470   0752             	
+1471   0752 23          	inc  hl
+1472   0753 C6 10       	add  a,$10
+1473   0755 07          	rlca
+1474   0756 07          	rlca
+1475   0757 07          	rlca
+1476   0758 E6 07       	and  $07
+1477   075A 11 67 20    	ld   de,$2067
+1478   075D 01 0D 00    	ld   bc,$000D
+1479   0760 EB          	ex   de,hl
+1480   0761             L0761:
+1481   0761 09          	add  hl,bc
+1482   0762 09          	add  hl,bc
+1483   0763 3D          	dec  a
+1484   0764 C2 61 07    	jp   nz,L0761
+1485   0767             	
+1486   0767 1A          	ld   a,(de)
+1487   0768 D6 08       	sub  $08
+1488   076A 96          	sub  (hl)
+1489   076B FE EC       	cp   $EC
+1490   076D D2 71 07    	jp   nc,L0771
+1491   0770             	
+1492   0770 09          	add  hl,bc
+1493   0771             L0771:
+1494   0771 2B          	dec  hl
+1495   0772 2B          	dec  hl
+1496   0773 36 00       	ld   (hl),$00
+1497   0775 EB          	ex   de,hl
+1498   0776 2B          	dec  hl
+1499   0777 7E          	ld   a,(hl)
+1500   0778 C6 30       	add  a,$30
+1501   077A E6 F0       	and  $F0
+1502   077C 57          	ld   d,a
+1503   077D 36 00       	ld   (hl),$00
+1504   077F 23          	inc  hl
+1505   0780 5E          	ld   e,(hl)
+1506   0781 23          	inc  hl
+1507   0782 E5          	push hl
+1508   0783 CD 00 0A    	call L0A00
+1509   0786             	
+1510   0786 7B          	ld   a,e
+1511   0787 E6 1F       	and  $1F
+1512   0789 CA 96 07    	jp   z,L0796
+1513   078C             	
+1514   078C 3D          	dec  a
+1515   078D CA 96 07    	jp   z,L0796
+1516   0790             	
+1517   0790             L0790:
+1518   0790 3D          	dec  a
+1519   0791 FE 1C       	cp   $1C
+1520   0793             	
+1521   0793 F2 90 07    	jp   p,L0790
+1522   0796             L0796:
+1523   0796 5F          	ld   e,a
+1524   0797 CD DB 07    	call L07DB
+1525   079A             	
+1526   079A 42          	ld   b,d
+1527   079B 04          	inc  b
+1528   079C 04          	inc  b
+1529   079D 4B          	ld   c,e
+1530   079E 0C          	inc  c
+1531   079F C5          	push bc
+1532   07A0 7B          	ld   a,e
+1533   07A1 C6 60       	add  a,$60
+1534   07A3 5F          	ld   e,a
+1535   07A4 D5          	push de
+1536   07A5 42          	ld   b,d
+1537   07A6 0C          	inc  c
+1538   07A7 C5          	push bc
+1539   07A8 3E 1E       	ld   a,$1E
+1540   07AA 32 25 20    	ld   ($2025),a								; Set timer
+1541   07AD 3E 0F       	ld   a,$0F
+1542   07AF 32 24 20    	ld   ($2024),a
+1543   07B2 3E 10       	ld   a,$10
+1544   07B4 D3 05       	out  ($05),a									; Sound write
+1545   07B6 7B          	ld   a,e
+1546   07B7 E6 02       	and  $02											; Mask bit 1
+1547   07B9 21 40 0F    	ld   hl,L0F40									; $0F40 or $0F42
+1548   07BC 85          	add  a,l
+1549   07BD 6F          	ld   l,a											; hl = ZAP or WAM
+1550   07BE             
+1551   07BE             				;; Get address from table -> hl
+1552   07BE 5E          	ld   e,(hl)
+1553   07BF 23          	inc  hl
+1554   07C0 56          	ld   d,(hl)
+1555   07C1 EB          	ex   de,hl										; hl = table entry
+1556   07C2             	
+1557   07C2 D1          	pop  de
+1558   07C3 7E          	ld   a,(hl)
+1559   07C4 23          	inc  hl
+1560   07C5 CD 30 0B    	call $0B30										; Draw string hl @ de, length a
+1561   07C8             	
+1562   07C8 D1          	pop  de
+1563   07C9 7E          	ld   a,(hl)
+1564   07CA 23          	inc  hl
+1565   07CB CD 30 0B    	call $0B30										; Draw string hl @ de, length a
+1566   07CE             	
+1567   07CE D1          	pop  de
+1568   07CF 21 B5 0E    	ld   hl,L0EB5
+1569   07D2 3E 03       	ld   a,$03
+1570   07D4 CD 30 0B    	call $0B30										; Draw string hl @ de, length a
+1571   07D7 E1          	pop  hl
+1572   07D8 C3 4F 07    	jp   L074F
+1573   07DB             L07DB:
+1574   07DB 21 F0 21    	ld   hl,$21F0
+1575   07DE             L07DE:
+1576   07DE 7E          	ld   a,(hl)
+1577   07DF 23          	inc  hl
+1578   07E0 B6          	or   (hl)
+1579   07E1 23          	inc  hl
+1580   07E2 C2 DE 07    	jp   nz,L07DE
+1581   07E5 2B          	dec  hl
+1582   07E6 73          	ld   (hl),e
+1583   07E7 2B          	dec  hl
+1584   07E8 72          	ld   (hl),d
+1585   07E9 C9          	ret
+1586   07EA             	
+1587   07EA             L07EA:
+1588   07EA 3A 2B 20    	ld   a,($202B)								; Player score
+1589   07ED FE 40       	cp   $40			
+1590   07EF DA F4 07    	jp   c,L07F4
+1591   07F2 3E 39       	ld   a,$39										; Min of score or $39
+1592   07F4             L07F4:
+1593   07F4 32 2C 20    	ld   ($202C),a 		
+1594   07F7             	
+1595   07F7 21 7F 20    	ld   hl,$207F									; 1st mine sprite
+1596   07FA 11 50 50    	ld   de,$5050
+1597   07FD             	
+1598   07FD             L07FD:
+1599   07FD 7E          	ld   a,(hl)
+1600   07FE A7          	and  a
+1601   07FF FA 35 08    	jp   m,L0835
+1602   0802             
+1603   0802             				;; Launch mine?
+1604   0802             L0802:
+1605   0802 01 08 00    	ld   bc,$0008
+1606   0805 09          	add  hl,bc
+1607   0806 36 0E       	ld   (hl),MINE>>8							; Mine MSB (+8)
+1608   0808 2B          	dec  hl
+1609   0809 36 A3       	ld   (hl),MINE&$FF 				    ; Mine LSB (+7)
+1610   080B 2B          	dec  hl
+1611   080C 2B          	dec  hl
+1612   080D 73          	ld   (hl),e										; Y Pos (+5)
+1613   080E 2B          	dec  hl
+1614   080F 70          	ld   (hl),b										; Delta Y (+4)
+1615   0810 2B          	dec  hl
+1616   0811 2B          	dec  hl
+1617   0812 72          	ld   (hl),d										; X Pos (+2)
+1618   0813 2B          	dec  hl
+1619   0814 36 01       	ld   (hl),$01									; Delta X (+1)
+1620   0816 2B          	dec  hl
+1621   0817 36 80       	ld   (hl),$80									; Flags
+1622   0819 7A          	ld   a,d
+1623   081A C6 51       	add  a,$51
+1624   081C 57          	ld   d,a
+1625   081D 1F          	rra
+1626   081E DA 2E 08    	jp   c,L082E
+1627   0821             	
+1628   0821 3A 2C 20    	ld   a,($202C)
+1629   0824 D6 10       	sub  $10
+1630   0826 F8          	ret  m
+1631   0827             	
+1632   0827 32 2C 20    	ld   ($202C),a
+1633   082A 7B          	ld   a,e
+1634   082B C6 20       	add  a,$20
+1635   082D 5F          	ld   e,a
+1636   082E             	
+1637   082E             L082E:
+1638   082E 01 0D 00    	ld   bc,$000D									; Increment
+1639   0831 09          	add  hl,bc										; Next mine
+1640   0832 C3 FD 07    	jp   L07FD										; More mines!
+1641   0835             
+1642   0835             	
+1643   0835             L0835:
+1644   0835 E5          	push hl
+1645   0836 D5          	push de
+1646   0837 23          	inc  hl
+1647   0838 23          	inc  hl
+1648   0839 5E          	ld   e,(hl)
+1649   083A 23          	inc  hl
+1650   083B 23          	inc  hl
+1651   083C 23          	inc  hl
+1652   083D 56          	ld   d,(hl)
+1653   083E CD 00 0A    	call L0A00
+1654   0841 EB          	ex   de,hl
+1655   0842 01 02 10    	ld   bc,$1002									; 16 x 2 byte area
+1656   0845 CD 3F 0A    	call L0A3F										; Clear area at hl
+1657   0848 D1          	pop  de
+1658   0849 E1          	pop  hl
+1659   084A C3 02 08    	jp   L0802
+1660   084D             
+1661   084D             HERASE:	
+1662   084D C8          	ret  z
+1663   084E AF          	xor  a
+1664   084F 32 06 20    	ld   ($2006),a
+1665   0852 3A 10 20    	ld   a,($2010)
+1666   0855 A7          	and  a
+1667   0856 C8          	ret  z
+1668   0857 21 E9 21    	ld   hl,$21E9
+1669   085A E5          	push hl
+1670   085B 01 30 04    	ld   bc,$0430
+1671   085E             L085E:
+1672   085E 71          	ld   (hl),c
+1673   085F 23          	inc  hl
+1674   0860 05          	dec  b
+1675   0861 C2 5E 08    	jp   nz,L085E
+1676   0864 E1          	pop  hl
+1677   0865 11 25 3E    	ld   de,$3E25
+1678   0868 3E 04       	ld   a,$04
+1679   086A C3 30 0B    	jp   $0B30										; Draw string hl @ de, length a
+1680   086D             
+1681   086D             				;; $09E8 Entry B -- ??
+1682   086D             JTBLB:													; $086D
+1683   086D EB          	ex   de,hl										; Sequence back to hl
+1684   086E 22 00 20    	ld   ($2000),hl								; Store
+1685   0871             	
+1686   0871 3A 03 20    	ld   a,($2003)								; 
+1687   0874 E6 07       	and  $07											; Mask low 3 bits
+1688   0876 FE 07       	cp   $07											; == $07?
+1689   0878 C2 7C 08    	jp   nz,L087C
+1690   087B AF          	xor  a												; Clear
+1691   087C             L087C:
+1692   087C 32 29 20    	ld   ($2029),a								; Write
+1693   087F C9          	ret
+1694   0880             
+1695   0880             				;; End of game clears
+1696   0880             L0880:
+1697   0880 F3          	di
+1698   0881 EB          	ex   de,hl										; Stash hl in de
+1699   0882 22 00 20    	ld   ($2000),hl
+1700   0885 AF          	xor  a
+1701   0886 D3 02       	out  ($02),a									; Clear periscope lamp
+1702   0888 D3 05       	out  ($05),a									; Clear audio latches
+1703   088A D3 01       	out  ($01),a									; Clear explosion lamp
+1704   088C E1          	pop  hl												; (Return address)
+1705   088D 01 00 00    	ld   bc,$0000
+1706   0890 11 00 00    	ld   de,$0000
+1707   0893 3E 10       	ld   a,$10
+1708   0895 31 10 40    	ld   sp,$4010									; Clear $4010 down to $2011
+1709   0898             L0898:
+1710   0898 C5          	push bc
+1711   0899 13          	inc  de
+1712   089A BA          	cp   d
+1713   089B C2 98 08    	jp   nz,L0898									; Loop
+1714   089E 31 00 24    	ld   sp,$2400
+1715   08A1 E9          	jp   (hl)
+1716   08A2             
+1717   08A2             				;; $09E8 Entry 3 (End game)
+1718   08A2             JTBL3:	
+1719   08A2             L08A2:
+1720   08A2 E1          	pop  hl
+1721   08A3 22 09 20    	ld   ($2009),hl
+1722   08A6 CD 80 08    	call L0880
+1723   08A9 2A 09 20    	ld   hl,($2009)
+1724   08AC E5          	push hl
+1725   08AD 21 04 0F    	ld   hl,L0F04									; Water
+1726   08B0 11 E0 27    	ld   de,$27E0
+1727   08B3 3E 20       	ld   a,$20
+1728   08B5 C3 30 0B    	jp   $0B30										; Draw string hl @ de, length a
+1729   08B8             L08B8:
+1730   08B8 DB 01       	in   a,($01)									; IN0
+1731   08BA 47          	ld   b,a
+1732   08BB DB 01       	in   a,($01)									; IN0
+1733   08BD 21 08 20    	ld   hl,$2008									; Last IN0
+1734   08C0 11 DA 09    	ld   de,$09DA									; Jump table for IN0
+1735   08C3 B8          	cp   b
+1736   08C4 CC 05 0B    	call z,L0B05									; Handle inputs
+1737   08C7             
+1738   08C7             				;; Jump table do nothing "routine"
+1739   08C7             HRET:		
+1740   08C7 C9          	ret														; (reset)
+1741   08C8             
+1742   08C8             				;; Handle coin
+1743   08C8             HCOIN:
+1744   08C8 C8          	ret  z												; No coin
+1745   08C9 3E 20       	ld   a,$20
+1746   08CB D3 05       	out  ($05),a
+1747   08CD 3E 0F       	ld   a,$0F
+1748   08CF 32 25 20    	ld   ($2025),a								; Set timer
+1749   08D2 3A 07 20    	ld   a,($2007)
+1750   08D5 47          	ld   b,a
+1751   08D6 21 04 20    	ld   hl,$2004
+1752   08D9 34          	inc  (hl)
+1753   08DA E6 04       	and  $04
+1754   08DC CA E2 08    	jp   z,L08E2
+1755   08DF 7E          	ld   a,(hl)
+1756   08E0 0F          	rrca
+1757   08E1 D8          	ret  c
+1758   08E2             L08E2:
+1759   08E2 36 00       	ld   (hl),$00
+1760   08E4 23          	inc  hl
+1761   08E5 34          	inc  (hl)
+1762   08E6 78          	ld   a,b
+1763   08E7 E6 08       	and  $08
+1764   08E9 CA F4 08    	jp   z,L08F4
+1765   08EC 34          	inc  (hl)
+1766   08ED 78          	ld   a,b
+1767   08EE E6 04       	and  $04
+1768   08F0 CA F4 08    	jp   z,L08F4
+1769   08F3 34          	inc  (hl)
+1770   08F4             L08F4:
+1771   08F4 7E          	ld   a,(hl)
+1772   08F5 E6 0F       	and  $0F
+1773   08F7 77          	ld   (hl),a
+1774   08F8             
+1775   08F8             HPUSH:	
+1776   08F8 C8          	ret  z
+1777   08F9 3A 02 20    	ld   a,($2002)
+1778   08FC A7          	and  a
+1779   08FD C0          	ret  nz
+1780   08FE 21 05 20    	ld   hl,$2005
+1781   0901 7E          	ld   a,(hl)
+1782   0902 A7          	and  a
+1783   0903 CA 1A 09    	jp   z,L091A
+1784   0906             L0906:
+1785   0906 35          	dec  (hl)
+1786   0907             	
+1787   0907 DB 01       	in   a,($01)									; IN1
+1788   0909 07          	rlca
+1789   090A 07          	rlca
+1790   090B E6 03       	and  $03											; Game time dips
+1791   090D 11 54 0F    	ld   de,$0F54
+1792   0910 83          	add  a,e
+1793   0911 5F          	ld   e,a
+1794   0912 1A          	ld   a,(de)
+1795   0913 32 02 20    	ld   ($2002),a								; Store time
+1796   0916 32 2A 20    	ld   ($202A),a								; Store time ?
+1797   0919 C9          	ret
+1798   091A             	
+1799   091A             L091A:
+1800   091A 3A 07 20    	ld   a,($2007)
+1801   091D E6 0C       	and  $0C
+1802   091F FE 0C       	cp   $0C
+1803   0921 C0          	ret  nz
+1804   0922 2B          	dec  hl
+1805   0923 7E          	ld   a,(hl)
+1806   0924 A7          	and  a
+1807   0925 C8          	ret  z
+1808   0926 C3 06 09    	jp   L0906
+1809   0929             
+1810   0929             				;; $2000 at reset
+1811   0929             L0929:
+1812   0929 04          	.db	$04												; Command 4 = String
+1813   092A 01          	.db	$01												; Length
+1814   092B B8 0E       	.dw	LTBLANK										; String src address
+1815   092D 30 3E       	.db	$30, $3E									; Screen dst address
+1816   092F             
+1817   092F 09          	.db	$09												; Commnad 9
+1818   0930 05 20       	.db	$05, $20									; ($2005) -> a   (select string)
+1819   0932 33 38       	.db	$33, $38									; Location
+1820   0934 E6 0E       	.dw	LTCOIN										; "Insert Coin"
+1821   0936 F1 0E       	.dw LTPUSH										; "Push Button"
+1822   0938             
+1823   0938 04          	.db	$04												; Command 4 = String
+1824   0939 1A          	.db	$1A												; Length 
+1825   093A CC 0E       	.dw	LTHIGH										; String src address
+1826   093C 02 3C       	.db	$02, $3C									; Screen dst address
+1827   093E             	
+1828   093E 0A          	.db	$0A												; Command A = BCD @ loc
+1829   093F 06 20       	.db	$06, $20									; bc = 2006 = high score
+1830   0941 E9 21       	.db	$E9, $21									; Buffer loc
+1831   0943 25 3E       	.db	$25, $3E									; Screen loc
+1832   0945             	
+1833   0945 0A          	.db	$0A												; Command A = BCD @ loc
+1834   0946 2B 20       	.db	$2B, $20									; bc = 202b = score
+1835   0948 E9 21       	.db	$E9, $21									; Buffer loc
+1836   094A 35 3E       	.db	$35, $3E									; Screen loc
+1837   094C             	
+1838   094C 02          	.db	$02												; Command 2 = arg to 2010
+1839   094D 0F          	.db	$0F												; arg
+1840   094E             
+1841   094E             L094E:	
+1842   094E 04          	.db	$04												; Command 4 = String
+1843   094F 09          	.db	$09												; Length
+1844   0950 C3 0E       	.dw	LTOVER										; String src address
+1845   0952 0B 2C       	.db	$0B, $2C									; Screen dst address
+1846   0954                     
+1847   0954             				;; Delay timer
+1848   0954 01          	.db	$01												; Command 1 = arg to 2011
+1849   0955 1E          	.db	$1E												; arg
+1850   0956 00          	.db	$00												; End of sequence
+1851   0957             
+1852   0957 04          	.db	$04												; Command 4 = String
+1853   0958 09          	.db	$09												; Length
+1854   0959 B8 0E       	.dw	LTBLANK										; String src address
+1855   095B 0B 2C       	.db $0B, $2C									; Screen dst address
+1856   095D             
+1857   095D             				;; Delay timer
+1858   095D 01          	.db	$01												; Command 1 = arg to 2011
+1859   095E 1E          	.db	$1E												; arg
+1860   095F 00          	.db	$00												; End of sequence
+1861   0960             
+1862   0960             				
+1863   0960 06          	.db	$06												; Command 6 = Set ($2000)
+1864   0961 4E 09       	.dw	L094E											; Next command address
+1865   0963             	
+1866   0963             L0963:
+1867   0963 03          	.db	$03												; Do end of game sequence
+1868   0964             	
+1869   0964 04          	.db	$04												; Command 4 = String
+1870   0965 08          	.db	$08												; Length
+1871   0966 FC 0E       	.dw LTSEA											; String src address (SEA WOLF)
+1872   0968 0C 2C       	.db	$0C, $2C									; Screen dst address
+1873   096A             
+1874   096A 04          	.db	$04												; Command 4 = String
+1875   096B 0A          	.db	$0A												; Length
+1876   096C CC 0E       	.dw	LTHIGH										; String src address (HIGH SCORE)
+1877   096E 02 3C       	.db	$02, $3C									; Screen dst address
+1878   0970             	
+1879   0970 0A          	.db	$0A												; Command A = BCD @ loc
+1880   0971 06 20       	.db	$06, $20									; bc = 2006 = high score
+1881   0973 E9 21       	.db	$E9, $21									; Buffer loc
+1882   0975 25 3E       	.db	$25, $3E									; Screen loc
+1883   0977             	
+1884   0977 09          	.db	$09												; Commnad 9
+1885   0978 05 20       	.db	$05, $20									; ($2005) -> a   (select string)
+1886   097A 33 38       	.db	$33, $38									; Location
+1887   097C E6 0E       	.dw	LTCOIN										; "Insert Coin"
+1888   097E F1 0E       	.dw	LTPUSH										; "Push Button"
+1889   0980             
+1890   0980             				;; Delay timer
+1891   0980 01          	.db	$01												; Command 1 = arg to 2011
+1892   0981 5A          	.db	$5A												; arg
+1893   0982 00          	.db	$00												; End of sequence
+1894   0983             
+1895   0983             				;; Launch ship in attract
+1896   0983 08          	.db	$08												; Command 8 (Data backwards to loc)
+1897   0984 09          	.db	$09												; Count
+1898   0985 60 20       	.dw	$2060											; de = $2060
+1899   0987 EB 0D       	.dw	SHIP3											; $0DBE -> ($205F-2060)
+1900   0989 20          	.db	$20												; $20   -> ($205E)
+1901   098A 15          	.db	$15												; $15 	-> ($205D)
+1902   098B 00          	.db	$00												; $00   -> ($205C)
+1903   098C E0          	.db	$E0												; $E0   -> ($205B)
+1904   098D 00          	.db	$00												; $00   -> ($205A)
+1905   098E 01          	.db	$01												; $01	-> ($2059)
+1906   098F C4          	.db	$C4												; $C4	-> ($2058)
+1907   0990             
+1908   0990             				;; Delay timer
+1909   0990 01          	.db	$01												; Command 1 = arg to 2011
+1910   0991 5A          	.db	$5A												; arg
+1911   0992 00          	.db	$00												; End of sequence
+1912   0993             
+1913   0993             				;; Launch missile in attract
+1914   0993 08          	.db	$08												; Command 8 (Data backwards to loc)
+1915   0994 09          	.db	$09												; Count
+1916   0995 EF 20       	.dw	$20EF											; de = $20EF
+1917   0997 75 0E       	.dw	SHOT0											; $0E75 -> ($20EE-20EF)
+1918   0999 9C          	.db	$9C												; $9C	-> ($20ED)
+1919   099A E0          	.db	$E0												; $E0	-> ($20EC)
+1920   099B FA          	.db	$FA												; $FA	-> ($20EB)
+1921   099C 00          	.db	$00												; $00	-> ($20EA)
+1922   099D A8          	.db	$A8												; $A8	-> ($20E9)
+1923   099E 00          	.db	$00												; $00	-> ($20E8)
+1924   099F C0          	.db	$C0												; $C0	-> ($20E7)
+1925   09A0             
+1926   09A0             				;; Delay timer
+1927   09A0 01          	.db	$01												; Command 1 = arg to 2011
+1928   09A1 B4          	.db	$B4												; arg
+1929   09A2 00          	.db	$00												; End of sequence
+1930   09A3             	
+1931   09A3 06          	.db	$06												; Command 6 = Set ($2000)
+1932   09A4 63 09       	.dw L0963   									; Next command address
+1933   09A6                     
+1934   09A6             				;; Delay timer
+1935   09A6             L09A6:
+1936   09A6 01          	.db	$01												; Command 1 = arg to 2011
+1937   09A7 0F          	.db	$0F												; arg
+1938   09A8 00          	.db	$00												; End of sequence
+1939   09A9             	
+1940   09A9 03          	.db	$03												; Command 3 = End game
+1941   09AA                    	
+1942   09AA 04          	.db	$04												; Command 4 = String
+1943   09AB 09          	.db	$09												; Length
+1944   09AC 29 0F       	.dw	LTTIME										; String src address (TIME/SCORE)
+1945   09AE 0E 3C       	.db	$0E, $3C									; Screen dst address
+1946   09B0             	
+1947   09B0 07          	.db	$07												; Command 7 = Store a to bc
+1948   09B1 28          	.db	$28												; a
+1949   09B2 22 20       	.db	$22, $20									; bc
+1950   09B4             
+1951   09B4 07          	.db	$07												; Command 7 = Store a to bc
+1952   09B5 0A          	.db	$0A												; a
+1953   09B6 21 20       	.db	$21, $20									; bc
+1954   09B8             
+1955   09B8 0B          	.db	$0B												; Command B = ??
+1956   09B9 00          	.db	$00												; End of sequence
+1957   09BA             
+1958   09BA             				;; Explosion lamp tables!
+1959   09BA             				;; Table for $0704
+1960   09BA             L09BA:
+1961   09BA 48 44 42 41 	.db	$48, $44, $42, $41, $88, $84, $82, $81		; 
+1961   09BE 88 84 82 81 
+1962   09C2             	
+1963   09C2             				;; Table for $06FE
+1964   09C2             L09C2:
+1965   09C2 18 14 12 11 	.db	$18, $14, $12, $11, $28, $24, $22, $21		; 
+1965   09C6 28 24 22 21 
+1966   09CA             
+1967   09CA             
+1968   09CA             				;; Jump table for IN1 changes (8 entries)
+1969   09CA             TBLIN1:	
+1970   09CA C8 08       	.dw	HCOIN											; 0 = 08C8 = Coin
+1971   09CC F8 08       	.dw	HPUSH											; 1 = 08F8 = Start
+1972   09CE C7 08       	.dw	HRET											; 2 = 08C7 = (ret) Coinage
+1973   09D0 C7 08       	.dw HRET											; 3 = 08C7 = (ret) Coinage
+1974   09D2 4D 08       	.dw	HERASE  									; 4 = 084D = Erase highs
+1975   09D4 C7 08       	.dw	HRET											; 5 = 08C7 = (ret) Extended time
+1976   09D6 C7 08       	.dw HRET											; 6 = 08C7 = (ret) Extended time
+1977   09D8 C7 08       	.dw	HRET											; 7 = 08C7 = (ret) Extended time
+1978   09DA             
+1979   09DA             				;; Jump table for IN0 changes (8 entries)
+1980   09DA             TBLIN0:	
+1981   09DA C7 08       	.dw	HRET											; 0 = 08C7 = (ret) Turret
+1982   09DC C7 08       	.dw	HRET											; 1 = 08C7 = (ret) Turret
+1983   09DE C7 08       	.dw	HRET											; 2 = 08C7 = (ret) Turret
+1984   09E0 C7 08       	.dw	HRET											; 3 = 08C7 = (ret) Turret
+1985   09E2 C7 08       	.dw	HRET											; 4 = 08C7 = (ret) Turret
+1986   09E4 7B 05       	.dw	HFIRE											; 5 = 057B = Fire button
+1987   09E6 C7 08       	.dw	HRET											; 6 = 08C7 = (ret) Time
+1988   09E8             L09E8:
+1989   09E8 C7 08       	.dw	HRET											; 7 = 08C7 = (ret) Time
+1990   09EA             
+1991   09EA             				;; Jump table for $047F (0 entry not used)
+1992   09EA             				;; Used for attract mode sequence
+1993   09EA             TBLJMP:	
+1994   09EA 7C 0B       	.dw	JTBL1											; 1 = 0B7C = Arg to 2011
+1995   09EC 72 0B       	.dw	JTBL2											; 2 = 0B72 = Arg to 2010
+1996   09EE A2 08       	.dw	JTBL3											; 3 = 08A2 = End of game + reset
+1997   09F0 22 0B       	.dw JTBL4											; 4 = 0B22 = String
+1998   09F2 ED 0A       	.dw	JTBL5											; 5 = 0AED = d <- (hl++), ret
+1999   09F4 86 0B       	.dw	JTBL6											; 6 = 0B86 = (de) -> $2000 
+2000   09F6 E1 0A       	.dw	JTBL7											; 7 = 0AE1 = val -> addr
+2001   09F8 9F 0A       	.dw	JTBL8											; 8 = 0A9F = data to loc
+2002   09FA BC 0A       	.dw	JTBL9											; 9 = 0ABC = Select String
+2003   09FC 53 0A       	.dw	JTBLA											; A = 0A53 = BCD @ location
+2004   09FE 6D 08       	.dw	JTBLB											; B = 086D
+2005   0A00             
+2006   0A00             				;; e&$07 -> c,  de = de >> 3 + $2400, 
+2007   0A00             L0A00:
+2008   0A00 7B          	ld   a,e			; Mask e
+2009   0A01 E6 07       	and  $07
+2010   0A03 4F          	ld   c,a			; Stash in a
+2011   0A04 06 03       	ld   b,$03
+2012   0A06             L0A06:
+2013   0A06 AF          	xor  a			; a=0, clc
+2014   0A07 7A          	ld   a,d
+2015   0A08 1F          	rra
+2016   0A09 57          	ld   d,a
+2017   0A0A 7B          	ld   a,e
+2018   0A0B 1F          	rra
+2019   0A0C 5F          	ld   e,a
+2020   0A0D 05          	dec  b
+2021   0A0E C2 06 0A    	jp   nz,L0A06
+2022   0A11 7A          	ld   a,d
+2023   0A12 C6 24       	add  a,$24
+2024   0A14 57          	ld   d,a
+2025   0A15 C9          	ret
+2026   0A16             
+2027   0A16             L0A16:
+2028   0A16 F5          	push af												; Store count
+2029   0A17 7E          	ld   a,(hl)										; Get value
+2030   0A18 02          	ld   (bc),a										; Store value
+2031   0A19 03          	inc  bc			
+2032   0A1A EB          	ex   de,hl
+2033   0A1B B6          	or   (hl)
+2034   0A1C 23          	inc  hl
+2035   0A1D 12          	ld   (de),a
+2036   0A1E F1          	pop  af												; count = a
+2037   0A1F E5          	push hl
+2038   0A20 21 20 00    	ld   hl,$0020									; Line increment
+2039   0A23 19          	add  hl,de										; hl = de+$0020
+2040   0A24 D1          	pop  de												; de = old hl
+2041   0A25 3D          	dec  a
+2042   0A26 C2 16 0A    	jp   nz,L0A16									; loop
+2043   0A29 C9          	ret
+2044   0A2A             
+2045   0A2A             	
+2046   0A2A             				;; Draw b x c block from de to screen at hl
+2047   0A2A             L0A2A:
+2048   0A2A C5          	push bc
+2049   0A2B E5          	push hl
+2050   0A2C             L0A2C:
+2051   0A2C 1A          	ld   a,(de)
+2052   0A2D 13          	inc  de
+2053   0A2E 77          	ld   (hl),a
+2054   0A2F 23          	inc  hl
+2055   0A30 0D          	dec  c
+2056   0A31 C2 2C 0A    	jp   nz,L0A2C
+2057   0A34 E1          	pop  hl
+2058   0A35 01 20 00    	ld   bc,$0020
+2059   0A38 09          	add  hl,bc
+2060   0A39 C1          	pop  bc
+2061   0A3A 05          	dec  b
+2062   0A3B C2 2A 0A    	jp   nz,L0A2A
+2063   0A3E C9          	ret
+2064   0A3F             
+2065   0A3F             
+2066   0A3F             				;; Clear (hl - hl+c-1)  b times with row offsets
+2067   0A3F             L0A3F:
+2068   0A3F AF          	xor  a
+2069   0A40             L0A40:
+2070   0A40 C5          	push bc
+2071   0A41 E5          	push hl
+2072   0A42             L0A42:
+2073   0A42 77          	ld   (hl),a
+2074   0A43 23          	inc  hl
+2075   0A44 0D          	dec  c
+2076   0A45 C2 42 0A    	jp   nz,L0A42
+2077   0A48 E1          	pop  hl
+2078   0A49 01 20 00    	ld   bc,$0020
+2079   0A4C 09          	add  hl,bc
+2080   0A4D C1          	pop  bc
+2081   0A4E 05          	dec  b
+2082   0A4F C2 40 0A    	jp   nz,L0A40
+2083   0A52 C9          	ret
+2084   0A53             
+2085   0A53             	
+2086   0A53             				;; $09E8 Entry A
+2087   0A53             JTBLA:													; $0A53
+2088   0A53 EB          	ex   de,hl
+2089   0A54 4E          	ld   c,(hl)										; Read bc
+2090   0A55 23          	inc  hl
+2091   0A56 46          	ld   b,(hl)
+2092   0A57 23          	inc  hl
+2093   0A58 5E          	ld   e,(hl)										; Read de
+2094   0A59 23          	inc  hl
+2095   0A5A 56          	ld   d,(hl)
+2096   0A5B 2B          	dec  hl												; Back up to use again
+2097   0A5C CD 82 0A    	call L0A82										; Draw BCD from bc at de
+2098   0A5F EB          	ex   de,hl										; Last address now in hl
+2099   0A60 CD 7A 0A    	call L0A7A										; Replace space with zero
+2100   0A63 23          	inc  hl
+2101   0A64 EB          	ex   de,hl										; Last address now in de
+2102   0A65 3E 30       	ld   a,$30
+2103   0A67 12          	ld   (de),a										; Append zero
+2104   0A68 13          	inc  de
+2105   0A69 12          	ld   (de),a										; Append zero
+2106   0A6A CD DC 0A    	call $0ADC										; (hl, hl+1) -> de, hl+=2
+2107   0A6D D5          	push de
+2108   0A6E CD DC 0A    	call $0ADC										; (hl, hl+1) -> de, hl+=2
+2109   0A71 22 00 20    	ld   ($2000),hl								; Next command 
+2110   0A74 E1          	pop  hl
+2111   0A75 3E 04       	ld   a,$04
+2112   0A77 C3 30 0B    	jp   $0B30										; Draw string hl @ de, length a
+2113   0A7A             
+2114   0A7A             				;; Replace space with a zero
+2115   0A7A             L0A7A:
+2116   0A7A 2B          	dec  hl
+2117   0A7B 7E          	ld   a,(hl)
+2118   0A7C E6 40       	and  $40
+2119   0A7E C8          	ret  z
+2120   0A7F 36 30       	ld   (hl),$30
+2121   0A81 C9          	ret
+2122   0A82             
+2123   0A82             				;; Draw BCD from bc at de
+2124   0A82             L0A82:
+2125   0A82 0A          	ld   a,(bc)	
+2126   0A83 1F          	rra
+2127   0A84 1F          	rra
+2128   0A85 1F          	rra
+2129   0A86 1F          	rra
+2130   0A87 E6 0F       	and  $0F			; Mask high nybble
+2131   0A89 C2 8E 0A    	jp   nz,L0A8E	
+2132   0A8C 3E 10       	ld   a,$10			; $40 -> blank
+2133   0A8E             L0A8E:
+2134   0A8E C6 30       	add  a,$30			; Decimal to ascii
+2135   0A90 12          	ld   (de),a			; Store digit
+2136   0A91 13          	inc  de			; Next screen loc
+2137   0A92 0A          	ld   a,(bc)			
+2138   0A93 E6 0F       	and  $0F			; Mask low nybble
+2139   0A95 C2 9A 0A    	jp   nz,L0A9A
+2140   0A98 3E 10       	ld   a,$10			; $40 -> blank
+2141   0A9A             L0A9A:
+2142   0A9A C6 30       	add  a,$30			; Decimal to ascii
+2143   0A9C 12          	ld   (de),a			; Store digit
+2144   0A9D 13          	inc  de			; Next screen loc
+2145   0A9E C9          	ret
+2146   0A9F             
+2147   0A9F             				;; $09E8 Entry 8 -- Copy data from sequence to address (backwards)
+2148   0A9F             JTBL8:													; $0A9F
+2149   0A9F EB          	ex   de,hl										; Sequence address back to hl
+2150   0AA0 46          	ld   b,(hl)										; Get count
+2151   0AA1 23          	inc  hl
+2152   0AA2 05          	dec  b
+2153   0AA3 05          	dec  b
+2154   0AA4 CD DC 0A    	call $0ADC										; (hl, hl+1) -> de, hl+=2  (address)
+2155   0AA7 4E          	ld   c,(hl)										; Read first byte
+2156   0AA8 23          	inc  hl
+2157   0AA9 7E          	ld   a,(hl)										; Read second byte
+2158   0AAA 23          	inc  hl
+2159   0AAB 12          	ld   (de),a										; Write first byte
+2160   0AAC 1B          	dec  de
+2161   0AAD 79          	ld   a,c
+2162   0AAE 12          	ld   (de),a										; Write second byte
+2163   0AAF 1B          	dec  de
+2164   0AB0             	
+2165   0AB0             L0AB0:
+2166   0AB0 7E          	ld   a,(hl)										; Loop for rest of count
+2167   0AB1 23          	inc  hl
+2168   0AB2 12          	ld   (de),a
+2169   0AB3 1B          	dec  de
+2170   0AB4 05          	dec  b
+2171   0AB5 C2 B0 0A    	jp   nz,L0AB0
+2172   0AB8 22 00 20    	ld   ($2000),hl								; Next command
+2173   0ABB C9          	ret
+2174   0ABC             
+2175   0ABC             	
+2176   0ABC             				;; $09E8 Entry 9 -- Draw INSERT COIN or PUSH BUTTON
+2177   0ABC             JTBL9:													; $0ABC
+2178   0ABC EB          	ex   de,hl
+2179   0ABD CD DC 0A    	call $0ADC										; (hl, hl+1) -> de, hl+=2
+2180   0AC0 1A          	ld   a,(de)
+2181   0AC1 CD DC 0A    	call $0ADC										; (hl, hl+1) -> de, hl+=2
+2182   0AC4 D5          	push de
+2183   0AC5 CD DC 0A    	call $0ADC										; (hl, hl+1) -> de, hl+=2
+2184   0AC8 D5          	push de
+2185   0AC9 CD DC 0A    	call $0ADC										; (hl, hl+1) -> de, hl+=2
+2186   0ACC 22 00 20    	ld   ($2000),hl								; Next command
+2187   0ACF             	
+2188   0ACF EB          	ex   de,hl
+2189   0AD0 A7          	and  a
+2190   0AD1 CA D5 0A    	jp   z,L0AD5									; Draw first string?
+2191   0AD4 E3          	ex   (sp),hl
+2192   0AD5             L0AD5:
+2193   0AD5 E1          	pop  hl
+2194   0AD6 D1          	pop  de
+2195   0AD7 3E 0B       	ld   a,$0B										; Length
+2196   0AD9 C3 30 0B    	jp   $0B30										; Draw string hl @ de, length a
+2197   0ADC             
+2198   0ADC             L0ADC:
+2199   0ADC 5E          	ld   e,(hl)										; LSB from table
+2200   0ADD 23          	inc  hl
+2201   0ADE 56          	ld   d,(hl)										; MSB from table
+2202   0ADF 23          	inc  hl
+2203   0AE0 C9          	ret
+2204   0AE1             
+2205   0AE1             				;; $9EA8 Entry 7 -- arg -> addr
+2206   0AE1             JTBL7:													; $0AE1
+2207   0AE1 1A          	ld   a,(de)										; Next entry
+2208   0AE2 13          	inc  de
+2209   0AE3 EB          	ex   de,hl
+2210   0AE4 4E          	ld   c,(hl)										; Next entry
+2211   0AE5 23          	inc  hl
+2212   0AE6 46          	ld   b,(hl)										; Next entry
+2213   0AE7 23          	inc  hl
+2214   0AE8 22 00 20    	ld   ($2000),hl								; Store command
+2215   0AEB 02          	ld   (bc),a										; a -> (bc)
+2216   0AEC C9          	ret
+2217   0AED             
+2218   0AED             				;; $09E8 Entry 5
+2219   0AED             				;; Read from de table into b, c, a, e, d
+2220   0AED             JTBL5:													; $0AED
+2221   0AED EB          	ex   de,hl			
+2222   0AEE 46          	ld   b,(hl)
+2223   0AEF 23          	inc  hl
+2224   0AF0 4E          	ld   c,(hl)
+2225   0AF1 23          	inc  hl
+2226   0AF2 7E          	ld   a,(hl)
+2227   0AF3 23          	inc  hl
+2228   0AF4 CD DC 0A    	call L0ADC
+2229   0AF7 22 00 20    	ld   ($2000),hl
+2230   0AFA EB          	ex   de,hl
+2231   0AFB 36 DB       	ld   (hl),$DB
+2232   0AFD 23          	inc  hl
+2233   0AFE 71          	ld   (hl),c
+2234   0AFF 23          	inc  hl
+2235   0B00 36 C9       	ld   (hl),$C9
+2236   0B02 2B          	dec  hl
+2237   0B03 2B          	dec  hl
+2238   0B04 E9          	jp   (hl)
+2239   0B05             
+2240   0B05             				;; Deal with inputs (when stable)
+2241   0B05             L0B05:
+2242   0B05 AE          	xor  (hl)
+2243   0B06 C8          	ret  z			; No changes
+2244   0B07             	
+2245   0B07 4F          	ld   c,a			; Stash IN0	
+2246   0B08 06 01       	ld   b,$01			; Bit being checked
+2247   0B0A             	
+2248   0B0A             L0B0A:
+2249   0B0A 79          	ld   a,c			; Restore IN0	
+2250   0B0B 0F          	rrca
+2251   0B0C DA 18 0B    	jp   c,L0B18 		; Bit is high
+2252   0B0F             	
+2253   0B0F 4F          	ld   c,a			; Stash IN0
+2254   0B10 78          	ld   a,b			; Shift check bit
+2255   0B11 07          	rlca
+2256   0B12 47          	ld   b,a
+2257   0B13 13          	inc  de			; Advance jump table
+2258   0B14 13          	inc  de
+2259   0B15 C3 0A 0B    	jp   L0B0A			; Loop
+2260   0B18             	
+2261   0B18             L0B18:
+2262   0B18 78          	ld   a,b			; Bit found to a
+2263   0B19 AE          	xor  (hl)			; Clear bit
+2264   0B1A 77          	ld   (hl),a			; Store back
+2265   0B1B A0          	and  b			; Value of changed bit
+2266   0B1C EB          	ex   de,hl
+2267   0B1D 4E          	ld   c,(hl)
+2268   0B1E 23          	inc  hl
+2269   0B1F 66          	ld   h,(hl)
+2270   0B20 69          	ld   l,c
+2271   0B21 E9          	jp   (hl)			; Handle changed bit
+2272   0B22             
+2273   0B22             				;; $09E8 Entry 4 (Draw string))
+2274   0B22             JTBL4:													; $0E22
+2275   0B22 EB          	ex   de,hl										; ($2000)+1 -> 
+2276   0B23 7E          	ld   a,(hl)
+2277   0B24 23          	inc  hl
+2278   0B25 CD DC 0A    	call $0ADC										; (hl, hl+1) -> de, hl+=2
+2279   0B28 D5          	push de
+2280   0B29 CD DC 0A    	call $0ADC										; (hl, hl,1) -> de, hl+=2
+2281   0B2C 22 00 20    	ld   ($2000),hl								; Next command
+2282   0B2F E1          	pop  hl												; String src address
+2283   0B30             
+2284   0B30             				;; Write string length a from hl to de
+2285   0B30             L0B30:
+2286   0B30 F5          	push af
+2287   0B31             L0B31:
+2288   0B31 7E          	ld   a,(hl)										; Get byte
+2289   0B32 23          	inc  hl
+2290   0B33 D6 30       	sub  $30											; Ascii -> tbl
+2291   0B35 F2 49 0B    	jp   p,L0B49									; Jump if >=$30
+2292   0B38             
+2293   0B38             				;; Blank space = $30-a (?)
+2294   0B38 47          	ld   b,a
+2295   0B39             L0B39:
+2296   0B39 1C          	inc  e
+2297   0B3A 7B          	ld   a,e
+2298   0B3B E6 1F       	and  $1F
+2299   0B3D C2 42 0B    	jp   nz,L0B42									; No wrap
+2300   0B40 14          	inc  d
+2301   0B41 14          	inc  d
+2302   0B42             L0B42:
+2303   0B42 04          	inc  b
+2304   0B43 C2 39 0B    	jp   nz,L0B39									; Loop
+2305   0B46 C3 31 0B    	jp   L0B31										; Next char
+2306   0B49             
+2307   0B49             				;; ASCII
+2308   0B49             L0B49:
+2309   0B49 E5          	push hl
+2310   0B4A D5          	push de
+2311   0B4B 21 8F 0B    	ld   hl,CHARS									; Start of char table
+2312   0B4E CA 59 0B    	jp   z,L0B59									; (no need to add)
+2313   0B51 01 0A 00    	ld   bc,$000A									; Add a*$0a
+2314   0B54             L0B54:
+2315   0B54 09          	add  hl,bc
+2316   0B55 3D          	dec  a
+2317   0B56 C2 54 0B    	jp   nz,L0B54
+2318   0B59             	
+2319   0B59             L0B59:
+2320   0B59 EB          	ex   de,hl
+2321   0B5A 01 20 00    	ld   bc,$0020
+2322   0B5D 3E 0A       	ld   a,$0A										; Loop $a times
+2323   0B5F             L0B5F:
+2324   0B5F F5          	push af
+2325   0B60 1A          	ld   a,(de)										; Load byte
+2326   0B61 13          	inc  de												; Inc index
+2327   0B62 77          	ld   (hl),a										; Store to screen
+2328   0B63 09          	add  hl,bc										; Next screen loc
+2329   0B64 F1          	pop  af
+2330   0B65 3D          	dec  a
+2331   0B66 C2 5F 0B    	jp   nz,L0B5F									; Loop for this char
+2332   0B69 D1          	pop  de
+2333   0B6A E1          	pop  hl
+2334   0B6B 13          	inc  de
+2335   0B6C F1          	pop  af
+2336   0B6D 3D          	dec  a
+2337   0B6E C2 30 0B    	jp   nz,L0B30									; Next char
+2338   0B71 C9          	ret
+2339   0B72             
+2340   0B72             				;; $09E8 Entry 2  (argument to 2010)
+2341   0B72             JTBL2:													; $0B72
+2342   0B72 EB          	ex   de,hl
+2343   0B73 7E          	ld   a,(hl)										; Argument
+2344   0B74 23          	inc  hl
+2345   0B75 22 00 20    	ld   ($2000),hl
+2346   0B78 32 10 20    	ld   ($2010),a								; Store ??
+2347   0B7B C9          	ret
+2348   0B7C             
+2349   0B7C             				;; $09E8 Entry 1 (argument to 2011)
+2350   0B7C             JTBL1:													; $0B7C
+2351   0B7C EB          	ex   de,hl
+2352   0B7D 7E          	ld   a,(hl)										; Argument
+2353   0B7E 23          	inc  hl
+2354   0B7F 22 00 20    	ld   ($2000),hl
+2355   0B82 32 11 20    	ld   ($2011),a								; Store ??
+2356   0B85 C9          	ret
+2357   0B86             
+2358   0B86             				;; $09E8 Entry 6 (de) -> $2000
+2359   0B86             JTBL6:													; $0B86
+2360   0B86 EB          	ex   de,hl
+2361   0B87 5E          	ld   e,(hl)
+2362   0B88 23          	inc  hl
+2363   0B89 56          	ld   d,(hl)
+2364   0B8A EB          	ex   de,hl
+2365   0B8B 22 00 20    	ld   ($2000),hl
+2366   0B8E C9          	ret
+2367   0B8F             
+2368   0B8F             				;; Character table
+2369   0B8F             				;; .org	$0b8f
+2370   0B8F             CHARS:													; $0B8F
+2371   0B8F 3C          	.db	$3c		; ....########.... 
+2372   0B90 7E          	.db	$7e		; ..############.. 
+2373   0B91 66          	.db	$66		; ..####....####.. 
+2374   0B92 66          	.db	$66		; ..####....####.. 
+2375   0B93 66          	.db	$66		; ..####....####.. 
+2376   0B94 66          	.db	$66		; ..####....####.. 
+2377   0B95 66          	.db	$66		; ..####....####.. 
+2378   0B96 66          	.db	$66		; ..####....####.. 
+2379   0B97 7E          	.db	$7e		; ..############.. 
+2380   0B98 3C          	.db	$3c		; ....########.... 
+2381   0B99             
+2382   0B99 18          	.db	$18		; ......####...... 
+2383   0B9A 1C          	.db	$1c		; ....######...... 
+2384   0B9B 18          	.db	$18		; ......####...... 
+2385   0B9C 18          	.db	$18		; ......####...... 
+2386   0B9D 18          	.db	$18		; ......####...... 
+2387   0B9E 18          	.db	$18		; ......####...... 
+2388   0B9F 18          	.db	$18		; ......####...... 
+2389   0BA0 18          	.db	$18		; ......####...... 
+2390   0BA1 3C          	.db	$3c		; ....########.... 
+2391   0BA2 3C          	.db	$3c		; ....########.... 
+2392   0BA3             
+2393   0BA3 3C          	.db	$3c		; ....########.... 
+2394   0BA4 7E          	.db	$7e		; ..############.. 
+2395   0BA5 66          	.db	$66		; ..####....####.. 
+2396   0BA6 60          	.db	$60		; ..........####.. 
+2397   0BA7 7C          	.db	$7c		; ....##########.. 
+2398   0BA8 3E          	.db	$3e		; ..##########.... 
+2399   0BA9 06          	.db	$06		; ..####.......... 
+2400   0BAA 06          	.db	$06		; ..####.......... 
+2401   0BAB 7E          	.db	$7e		; ..############.. 
+2402   0BAC 7E          	.db	$7e		; ..############.. 
+2403   0BAD             
+2404   0BAD 3C          	.db	$3c		; ....########.... 
+2405   0BAE 7E          	.db	$7e		; ..############.. 
+2406   0BAF 66          	.db	$66		; ..####....####.. 
+2407   0BB0 60          	.db	$60		; ..........####.. 
+2408   0BB1 38          	.db	$38		; ......######.... 
+2409   0BB2 78          	.db	$78		; ......########.. 
+2410   0BB3 60          	.db	$60		; ..........####.. 
+2411   0BB4 66          	.db	$66		; ..####....####.. 
+2412   0BB5 7E          	.db	$7e		; ..############.. 
+2413   0BB6 3C          	.db	$3c		; ....########.... 
+2414   0BB7             
+2415   0BB7 66          	.db	$66		; ..####....####.. 
+2416   0BB8 66          	.db	$66		; ..####....####.. 
+2417   0BB9 66          	.db	$66		; ..####....####.. 
+2418   0BBA 66          	.db	$66		; ..####....####.. 
+2419   0BBB 7E          	.db	$7e		; ..############.. 
+2420   0BBC 7E          	.db	$7e		; ..############.. 
+2421   0BBD 60          	.db	$60		; ..........####.. 
+2422   0BBE 60          	.db	$60		; ..........####.. 
+2423   0BBF 60          	.db	$60		; ..........####.. 
+2424   0BC0 60          	.db	$60		; ..........####.. 
+2425   0BC1             
+2426   0BC1 3E          	.db	$3e		; ..##########.... 
+2427   0BC2 3E          	.db	$3e		; ..##########.... 
+2428   0BC3 06          	.db	$06		; ..####.......... 
+2429   0BC4 06          	.db	$06		; ..####.......... 
+2430   0BC5 3E          	.db	$3e		; ..##########.... 
+2431   0BC6 7E          	.db	$7e		; ..############.. 
+2432   0BC7 60          	.db	$60		; ..........####.. 
+2433   0BC8 66          	.db	$66		; ..####....####.. 
+2434   0BC9 7E          	.db	$7e		; ..############.. 
+2435   0BCA 3C          	.db	$3c		; ....########.... 
+2436   0BCB             
+2437   0BCB 3C          	.db	$3c		; ....########.... 
+2438   0BCC 3E          	.db	$3e		; ..##########.... 
+2439   0BCD 06          	.db	$06		; ..####.......... 
+2440   0BCE 06          	.db	$06		; ..####.......... 
+2441   0BCF 3E          	.db	$3e		; ..##########.... 
+2442   0BD0 7E          	.db	$7e		; ..############.. 
+2443   0BD1 66          	.db	$66		; ..####....####.. 
+2444   0BD2 66          	.db	$66		; ..####....####.. 
+2445   0BD3 7E          	.db	$7e		; ..############.. 
+2446   0BD4 3C          	.db	$3c		; ....########.... 
+2447   0BD5             
+2448   0BD5 7E          	.db	$7e		; ..############.. 
+2449   0BD6 7E          	.db	$7e		; ..############.. 
+2450   0BD7 60          	.db	$60		; ..........####.. 
+2451   0BD8 70          	.db	$70		; ........######.. 
+2452   0BD9 30          	.db	$30		; ........####.... 
+2453   0BDA 38          	.db	$38		; ......######.... 
+2454   0BDB 18          	.db	$18		; ......####...... 
+2455   0BDC 1C          	.db	$1c		; ....######...... 
+2456   0BDD 0C          	.db	$0c		; ....####........ 
+2457   0BDE 0C          	.db	$0c		; ....####........ 
+2458   0BDF             
+2459   0BDF 3C          	.db	$3c		; ....########.... 
+2460   0BE0 7E          	.db	$7e		; ..############.. 
+2461   0BE1 66          	.db	$66		; ..####....####.. 
+2462   0BE2 66          	.db	$66		; ..####....####.. 
+2463   0BE3 3C          	.db	$3c		; ....########.... 
+2464   0BE4 7E          	.db	$7e		; ..############.. 
+2465   0BE5 66          	.db	$66		; ..####....####.. 
+2466   0BE6 66          	.db	$66		; ..####....####.. 
+2467   0BE7 7E          	.db	$7e		; ..############.. 
+2468   0BE8 3C          	.db	$3c		; ....########.... 
+2469   0BE9             
+2470   0BE9 3C          	.db	$3c		; ....########.... 
+2471   0BEA 7E          	.db	$7e		; ..############.. 
+2472   0BEB 66          	.db	$66		; ..####....####.. 
+2473   0BEC 66          	.db	$66		; ..####....####.. 
+2474   0BED 7E          	.db	$7e		; ..############.. 
+2475   0BEE 7C          	.db	$7c		; ....##########.. 
+2476   0BEF 60          	.db	$60		; ..........####.. 
+2477   0BF0 60          	.db	$60		; ..........####.. 
+2478   0BF1 7C          	.db	$7c		; ....##########.. 
+2479   0BF2 3C          	.db	$3c		; ....########.... 
+2480   0BF3             
+2481   0BF3             WATER0:													; $0BF3 
+2482   0BF3 0C          	.db	$0c		; ....####........ 
+2483   0BF4 93          	.db	$93		; ####....##....## 
+2484   0BF5 60          	.db	$60		; ..........####.. 
+2485   0BF6 00          	.db	$00		; ................ 
+2486   0BF7 00          	.db	$00		; ................ 
+2487   0BF8 00          	.db	$00		; ................ 
+2488   0BF9 00          	.db	$00		; ................ 
+2489   0BFA 00          	.db	$00		; ................ 
+2490   0BFB 00          	.db	$00		; ................ 
+2491   0BFC 00          	.db	$00		; ................ 
+2492   0BFD             
+2493   0BFD             WATER1:													; $0BFD
+2494   0BFD 60          	.db	$60		; ..........####.. 
+2495   0BFE 99          	.db	$99		; ##....####....## 
+2496   0BFF 06          	.db	$06		; ..####.......... 
+2497   0C00 00          	.db	$00		; ................ 
+2498   0C01 00          	.db	$00		; ................ 
+2499   0C02 00          	.db	$00		; ................ 
+2500   0C03 00          	.db	$00		; ................ 
+2501   0C04 00          	.db	$00		; ................ 
+2502   0C05 00          	.db	$00		; ................ 
+2503   0C06 00          	.db	$00		; ................ 
+2504   0C07             
+2505   0C07             WATER2:													; $0C07
+2506   0C07 30          	.db	$30		; ........####.... 
+2507   0C08 CD          	.db	$cd		; ##..####....#### 
+2508   0C09 02          	.db	$02		; ..##............ 
+2509   0C0A 00          	.db	$00		; ................ 
+2510   0C0B 00          	.db	$00		; ................ 
+2511   0C0C 00          	.db	$00		; ................ 
+2512   0C0D 00          	.db	$00		; ................ 
+2513   0C0E 00          	.db	$00		; ................ 
+2514   0C0F 00          	.db	$00		; ................ 
+2515   0C10 00          	.db	$00		; ................ 
+2516   0C11             
+2517   0C11             EXP0:														; $0C11
+2518   0C11 02          	.db	$02		; ..##............ 
+2519   0C12 C0          	.db	$c0		; ............#### 
+2520   0C13 78          	.db	$78		; ......########.. 
+2521   0C14 E0          	.db	$e0		; ..........###### 
+2522   0C15 80          	.db	$80		; ..............## 
+2523   0C16 F0          	.db	$f0		; ........######## 
+2524   0C17 01          	.db	$01		; ##.............. 
+2525   0C18 C0          	.db	$c0		; ............#### 
+2526   0C19 F0          	.db	$f0		; ........######## 
+2527   0C1A 7C          	.db	$7c		; ....##########.. 
+2528   0C1B             
+2529   0C1B             EXP1:														; $0C1B
+2530   0C1B 08          	.db	$08		; ......##........ 
+2531   0C1C 1C          	.db	$1c		; ....######...... 
+2532   0C1D 3E          	.db	$3e		; ..##########.... 
+2533   0C1E 7F          	.db	$7f		; ##############.. 
+2534   0C1F FF          	.db	$ff		; ################ 
+2535   0C20 FF          	.db	$ff		; ################ 
+2536   0C21 BF          	.db	$bf		; ############..## 
+2537   0C22 1F          	.db	$1f		; ##########...... 
+2538   0C23 02          	.db	$02		; ..##............ 
+2539   0C24 40          	.db	$40		; ............##.. 
+2540   0C25             
+2541   0C25             EXP2:														; $0C25
+2542   0C25 02          	.db	$02		; ..##............ 
+2543   0C26 80          	.db	$80		; ..............## 
+2544   0C27 78          	.db	$78		; ......########.. 
+2545   0C28 1E          	.db	$1e		; ..########...... 
+2546   0C29 07          	.db	$07		; ######.......... 
+2547   0C2A 01          	.db	$01		; ##.............. 
+2548   0C2B 7C          	.db	$7c		; ....##########.. 
+2549   0C2C F8          	.db	$f8		; ......########## 
+2550   0C2D 0C          	.db	$0c		; ....####........ 
+2551   0C2E 10          	.db	$10		; ........##...... 
+2552   0C2F             
+2553   0C2F 00          	.db	$00		; ................ 
+2554   0C30 00          	.db	$00		; ................ 
+2555   0C31 00          	.db	$00		; ................ 
+2556   0C32 00          	.db	$00		; ................ 
+2557   0C33 00          	.db	$00		; ................ 
+2558   0C34 00          	.db	$00		; ................ 
+2559   0C35 00          	.db	$00		; ................ 
+2560   0C36 00          	.db	$00		; ................ 
+2561   0C37 00          	.db	$00		; ................ 
+2562   0C38 00          	.db	$00		; ................ 
+2563   0C39             
+2564   0C39 18          	.db	$18		; ......####...... 
+2565   0C3A 3C          	.db	$3c		; ....########.... 
+2566   0C3B 7E          	.db	$7e		; ..############.. 
+2567   0C3C 66          	.db	$66		; ..####....####.. 
+2568   0C3D 66          	.db	$66		; ..####....####.. 
+2569   0C3E 66          	.db	$66		; ..####....####.. 
+2570   0C3F 7E          	.db	$7e		; ..############.. 
+2571   0C40 7E          	.db	$7e		; ..############.. 
+2572   0C41 66          	.db	$66		; ..####....####.. 
+2573   0C42 66          	.db	$66		; ..####....####.. 
+2574   0C43             
+2575   0C43 3E          	.db	$3e		; ..##########.... 
+2576   0C44 7E          	.db	$7e		; ..############.. 
+2577   0C45 66          	.db	$66		; ..####....####.. 
+2578   0C46 66          	.db	$66		; ..####....####.. 
+2579   0C47 3E          	.db	$3e		; ..##########.... 
+2580   0C48 7E          	.db	$7e		; ..############.. 
+2581   0C49 66          	.db	$66		; ..####....####.. 
+2582   0C4A 66          	.db	$66		; ..####....####.. 
+2583   0C4B 7E          	.db	$7e		; ..############.. 
+2584   0C4C 3E          	.db	$3e		; ..##########.... 
+2585   0C4D             
+2586   0C4D 3C          	.db	$3c		; ....########.... 
+2587   0C4E 7E          	.db	$7e		; ..############.. 
+2588   0C4F 66          	.db	$66		; ..####....####.. 
+2589   0C50 06          	.db	$06		; ..####.......... 
+2590   0C51 06          	.db	$06		; ..####.......... 
+2591   0C52 06          	.db	$06		; ..####.......... 
+2592   0C53 06          	.db	$06		; ..####.......... 
+2593   0C54 66          	.db	$66		; ..####....####.. 
+2594   0C55 7E          	.db	$7e		; ..############.. 
+2595   0C56 3C          	.db	$3c		; ....########.... 
+2596   0C57             
+2597   0C57 3E          	.db	$3e		; ..##########.... 
+2598   0C58 7E          	.db	$7e		; ..############.. 
+2599   0C59 66          	.db	$66		; ..####....####.. 
+2600   0C5A 66          	.db	$66		; ..####....####.. 
+2601   0C5B 66          	.db	$66		; ..####....####.. 
+2602   0C5C 66          	.db	$66		; ..####....####.. 
+2603   0C5D 66          	.db	$66		; ..####....####.. 
+2604   0C5E 66          	.db	$66		; ..####....####.. 
+2605   0C5F 7E          	.db	$7e		; ..############.. 
+2606   0C60 3E          	.db	$3e		; ..##########.... 
+2607   0C61             
+2608   0C61 7E          	.db	$7e		; ..############.. 
+2609   0C62 7E          	.db	$7e		; ..############.. 
+2610   0C63 06          	.db	$06		; ..####.......... 
+2611   0C64 06          	.db	$06		; ..####.......... 
+2612   0C65 3E          	.db	$3e		; ..##########.... 
+2613   0C66 3E          	.db	$3e		; ..##########.... 
+2614   0C67 06          	.db	$06		; ..####.......... 
+2615   0C68 06          	.db	$06		; ..####.......... 
+2616   0C69 7E          	.db	$7e		; ..############.. 
+2617   0C6A 7E          	.db	$7e		; ..############.. 
+2618   0C6B             
+2619   0C6B 7E          	.db	$7e		; ..############.. 
+2620   0C6C 7E          	.db	$7e		; ..############.. 
+2621   0C6D 06          	.db	$06		; ..####.......... 
+2622   0C6E 06          	.db	$06		; ..####.......... 
+2623   0C6F 3E          	.db	$3e		; ..##########.... 
+2624   0C70 3E          	.db	$3e		; ..##########.... 
+2625   0C71 06          	.db	$06		; ..####.......... 
+2626   0C72 06          	.db	$06		; ..####.......... 
+2627   0C73 06          	.db	$06		; ..####.......... 
+2628   0C74 06          	.db	$06		; ..####.......... 
+2629   0C75             
+2630   0C75 3C          	.db	$3c		; ....########.... 
+2631   0C76 7E          	.db	$7e		; ..############.. 
+2632   0C77 66          	.db	$66		; ..####....####.. 
+2633   0C78 06          	.db	$06		; ..####.......... 
+2634   0C79 06          	.db	$06		; ..####.......... 
+2635   0C7A 76          	.db	$76		; ..####..######.. 
+2636   0C7B 76          	.db	$76		; ..####..######.. 
+2637   0C7C 66          	.db	$66		; ..####....####.. 
+2638   0C7D 7E          	.db	$7e		; ..############.. 
+2639   0C7E 3C          	.db	$3c		; ....########.... 
+2640   0C7F             
+2641   0C7F 66          	.db	$66		; ..####....####.. 
+2642   0C80 66          	.db	$66		; ..####....####.. 
+2643   0C81 66          	.db	$66		; ..####....####.. 
+2644   0C82 66          	.db	$66		; ..####....####.. 
+2645   0C83 7E          	.db	$7e		; ..############.. 
+2646   0C84 7E          	.db	$7e		; ..############.. 
+2647   0C85 66          	.db	$66		; ..####....####.. 
+2648   0C86 66          	.db	$66		; ..####....####.. 
+2649   0C87 66          	.db	$66		; ..####....####.. 
+2650   0C88 66          	.db	$66		; ..####....####.. 
+2651   0C89             
+2652   0C89 3C          	.db	$3c		; ....########.... 
+2653   0C8A 3C          	.db	$3c		; ....########.... 
+2654   0C8B 18          	.db	$18		; ......####...... 
+2655   0C8C 18          	.db	$18		; ......####...... 
+2656   0C8D 18          	.db	$18		; ......####...... 
+2657   0C8E 18          	.db	$18		; ......####...... 
+2658   0C8F 18          	.db	$18		; ......####...... 
+2659   0C90 18          	.db	$18		; ......####...... 
+2660   0C91 3C          	.db	$3c		; ....########.... 
+2661   0C92 3C          	.db	$3c		; ....########.... 
+2662   0C93             
+2663   0C93 60          	.db	$60		; ..........####.. 
+2664   0C94 60          	.db	$60		; ..........####.. 
+2665   0C95 60          	.db	$60		; ..........####.. 
+2666   0C96 60          	.db	$60		; ..........####.. 
+2667   0C97 60          	.db	$60		; ..........####.. 
+2668   0C98 60          	.db	$60		; ..........####.. 
+2669   0C99 60          	.db	$60		; ..........####.. 
+2670   0C9A 66          	.db	$66		; ..####....####.. 
+2671   0C9B 7E          	.db	$7e		; ..############.. 
+2672   0C9C 3C          	.db	$3c		; ....########.... 
+2673   0C9D             
+2674   0C9D 66          	.db	$66		; ..####....####.. 
+2675   0C9E 66          	.db	$66		; ..####....####.. 
+2676   0C9F 76          	.db	$76		; ..####..######.. 
+2677   0CA0 3E          	.db	$3e		; ..##########.... 
+2678   0CA1 1E          	.db	$1e		; ..########...... 
+2679   0CA2 1E          	.db	$1e		; ..########...... 
+2680   0CA3 3E          	.db	$3e		; ..##########.... 
+2681   0CA4 76          	.db	$76		; ..####..######.. 
+2682   0CA5 66          	.db	$66		; ..####....####.. 
+2683   0CA6 66          	.db	$66		; ..####....####.. 
+2684   0CA7             
+2685   0CA7 06          	.db	$06		; ..####.......... 
+2686   0CA8 06          	.db	$06		; ..####.......... 
+2687   0CA9 06          	.db	$06		; ..####.......... 
+2688   0CAA 06          	.db	$06		; ..####.......... 
+2689   0CAB 06          	.db	$06		; ..####.......... 
+2690   0CAC 06          	.db	$06		; ..####.......... 
+2691   0CAD 06          	.db	$06		; ..####.......... 
+2692   0CAE 06          	.db	$06		; ..####.......... 
+2693   0CAF 7E          	.db	$7e		; ..############.. 
+2694   0CB0 7E          	.db	$7e		; ..############.. 
+2695   0CB1             
+2696   0CB1 C3          	.db	$c3		; ####........#### 
+2697   0CB2 C3          	.db	$c3		; ####........#### 
+2698   0CB3 E7          	.db	$e7		; ######....###### 
+2699   0CB4 E7          	.db	$e7		; ######....###### 
+2700   0CB5 FF          	.db	$ff		; ################ 
+2701   0CB6 FF          	.db	$ff		; ################ 
+2702   0CB7 DB          	.db	$db		; ####..####..#### 
+2703   0CB8 C3          	.db	$c3		; ####........#### 
+2704   0CB9 C3          	.db	$c3		; ####........#### 
+2705   0CBA C3          	.db	$c3		; ####........#### 
+2706   0CBB             
+2707   0CBB 66          	.db	$66		; ..####....####.. 
+2708   0CBC 66          	.db	$66		; ..####....####.. 
+2709   0CBD 6E          	.db	$6e		; ..######..####.. 
+2710   0CBE 6E          	.db	$6e		; ..######..####.. 
+2711   0CBF 7E          	.db	$7e		; ..############.. 
+2712   0CC0 7E          	.db	$7e		; ..############.. 
+2713   0CC1 76          	.db	$76		; ..####..######.. 
+2714   0CC2 76          	.db	$76		; ..####..######.. 
+2715   0CC3 66          	.db	$66		; ..####....####.. 
+2716   0CC4 66          	.db	$66		; ..####....####.. 
+2717   0CC5             
+2718   0CC5 3C          	.db	$3c		; ....########.... 
+2719   0CC6 7E          	.db	$7e		; ..############.. 
+2720   0CC7 66          	.db	$66		; ..####....####.. 
+2721   0CC8 66          	.db	$66		; ..####....####.. 
+2722   0CC9 66          	.db	$66		; ..####....####.. 
+2723   0CCA 66          	.db	$66		; ..####....####.. 
+2724   0CCB 66          	.db	$66		; ..####....####.. 
+2725   0CCC 66          	.db	$66		; ..####....####.. 
+2726   0CCD 7E          	.db	$7e		; ..############.. 
+2727   0CCE 3C          	.db	$3c		; ....########.... 
+2728   0CCF             
+2729   0CCF 3E          	.db	$3e		; ..##########.... 
+2730   0CD0 7E          	.db	$7e		; ..############.. 
+2731   0CD1 66          	.db	$66		; ..####....####.. 
+2732   0CD2 66          	.db	$66		; ..####....####.. 
+2733   0CD3 7E          	.db	$7e		; ..############.. 
+2734   0CD4 3E          	.db	$3e		; ..##########.... 
+2735   0CD5 06          	.db	$06		; ..####.......... 
+2736   0CD6 06          	.db	$06		; ..####.......... 
+2737   0CD7 06          	.db	$06		; ..####.......... 
+2738   0CD8 06          	.db	$06		; ..####.......... 
+2739   0CD9             
+2740   0CD9 3C          	.db	$3c		; ....########.... 
+2741   0CDA 7E          	.db	$7e		; ..############.. 
+2742   0CDB 66          	.db	$66		; ..####....####.. 
+2743   0CDC 66          	.db	$66		; ..####....####.. 
+2744   0CDD 66          	.db	$66		; ..####....####.. 
+2745   0CDE 66          	.db	$66		; ..####....####.. 
+2746   0CDF 66          	.db	$66		; ..####....####.. 
+2747   0CE0 66          	.db	$66		; ..####....####.. 
+2748   0CE1 7E          	.db	$7e		; ..############.. 
+2749   0CE2 5C          	.db	$5c		; ....######..##.. 
+2750   0CE3             
+2751   0CE3 3E          	.db	$3e		; ..##########.... 
+2752   0CE4 7E          	.db	$7e		; ..############.. 
+2753   0CE5 66          	.db	$66		; ..####....####.. 
+2754   0CE6 66          	.db	$66		; ..####....####.. 
+2755   0CE7 7E          	.db	$7e		; ..############.. 
+2756   0CE8 3E          	.db	$3e		; ..##########.... 
+2757   0CE9 76          	.db	$76		; ..####..######.. 
+2758   0CEA 66          	.db	$66		; ..####....####.. 
+2759   0CEB 66          	.db	$66		; ..####....####.. 
+2760   0CEC 66          	.db	$66		; ..####....####.. 
+2761   0CED             
+2762   0CED 3C          	.db	$3c		; ....########.... 
+2763   0CEE 7E          	.db	$7e		; ..############.. 
+2764   0CEF 66          	.db	$66		; ..####....####.. 
+2765   0CF0 06          	.db	$06		; ..####.......... 
+2766   0CF1 3E          	.db	$3e		; ..##########.... 
+2767   0CF2 7C          	.db	$7c		; ....##########.. 
+2768   0CF3 60          	.db	$60		; ..........####.. 
+2769   0CF4 66          	.db	$66		; ..####....####.. 
+2770   0CF5 7E          	.db	$7e		; ..############.. 
+2771   0CF6 3C          	.db	$3c		; ....########.... 
+2772   0CF7             
+2773   0CF7 7E          	.db	$7e		; ..############.. 
+2774   0CF8 7E          	.db	$7e		; ..############.. 
+2775   0CF9 18          	.db	$18		; ......####...... 
+2776   0CFA 18          	.db	$18		; ......####...... 
+2777   0CFB 18          	.db	$18		; ......####...... 
+2778   0CFC 18          	.db	$18		; ......####...... 
+2779   0CFD 18          	.db	$18		; ......####...... 
+2780   0CFE 18          	.db	$18		; ......####...... 
+2781   0CFF 18          	.db	$18		; ......####...... 
+2782   0D00 18          	.db	$18		; ......####...... 
+2783   0D01             
+2784   0D01 66          	.db	$66		; ..####....####.. 
+2785   0D02 66          	.db	$66		; ..####....####.. 
+2786   0D03 66          	.db	$66		; ..####....####.. 
+2787   0D04 66          	.db	$66		; ..####....####.. 
+2788   0D05 66          	.db	$66		; ..####....####.. 
+2789   0D06 66          	.db	$66		; ..####....####.. 
+2790   0D07 66          	.db	$66		; ..####....####.. 
+2791   0D08 66          	.db	$66		; ..####....####.. 
+2792   0D09 7E          	.db	$7e		; ..############.. 
+2793   0D0A 3C          	.db	$3c		; ....########.... 
+2794   0D0B             
+2795   0D0B 66          	.db	$66		; ..####....####.. 
+2796   0D0C 66          	.db	$66		; ..####....####.. 
+2797   0D0D 66          	.db	$66		; ..####....####.. 
+2798   0D0E 66          	.db	$66		; ..####....####.. 
+2799   0D0F 66          	.db	$66		; ..####....####.. 
+2800   0D10 7E          	.db	$7e		; ..############.. 
+2801   0D11 3C          	.db	$3c		; ....########.... 
+2802   0D12 3C          	.db	$3c		; ....########.... 
+2803   0D13 18          	.db	$18		; ......####...... 
+2804   0D14 18          	.db	$18		; ......####...... 
+2805   0D15             
+2806   0D15 C3          	.db	$c3		; ####........#### 
+2807   0D16 C3          	.db	$c3		; ####........#### 
+2808   0D17 C3          	.db	$c3		; ####........#### 
+2809   0D18 DB          	.db	$db		; ####..####..#### 
+2810   0D19 FF          	.db	$ff		; ################ 
+2811   0D1A FF          	.db	$ff		; ################ 
+2812   0D1B E7          	.db	$e7		; ######....###### 
+2813   0D1C E7          	.db	$e7		; ######....###### 
+2814   0D1D C3          	.db	$c3		; ####........#### 
+2815   0D1E C3          	.db	$c3		; ####........#### 
+2816   0D1F             
+2817   0D1F 66          	.db	$66		; ..####....####.. 
+2818   0D20 66          	.db	$66		; ..####....####.. 
+2819   0D21 7E          	.db	$7e		; ..############.. 
+2820   0D22 3C          	.db	$3c		; ....########.... 
+2821   0D23 18          	.db	$18		; ......####...... 
+2822   0D24 18          	.db	$18		; ......####...... 
+2823   0D25 3C          	.db	$3c		; ....########.... 
+2824   0D26 7E          	.db	$7e		; ..############.. 
+2825   0D27 66          	.db	$66		; ..####....####.. 
+2826   0D28 66          	.db	$66		; ..####....####.. 
+2827   0D29             
+2828   0D29 66          	.db	$66		; ..####....####.. 
+2829   0D2A 66          	.db	$66		; ..####....####.. 
+2830   0D2B 7E          	.db	$7e		; ..############.. 
+2831   0D2C 3C          	.db	$3c		; ....########.... 
+2832   0D2D 18          	.db	$18		; ......####...... 
+2833   0D2E 18          	.db	$18		; ......####...... 
+2834   0D2F 18          	.db	$18		; ......####...... 
+2835   0D30 18          	.db	$18		; ......####...... 
+2836   0D31 18          	.db	$18		; ......####...... 
+2837   0D32 18          	.db	$18		; ......####...... 
+2838   0D33             
+2839   0D33 7E          	.db	$7e		; ..############.. 
+2840   0D34 7E          	.db	$7e		; ..############.. 
+2841   0D35 60          	.db	$60		; ..........####.. 
+2842   0D36 70          	.db	$70		; ........######.. 
+2843   0D37 38          	.db	$38		; ......######.... 
+2844   0D38 1C          	.db	$1c		; ....######...... 
+2845   0D39 0E          	.db	$0e		; ..######........ 
+2846   0D3A 06          	.db	$06		; ..####.......... 
+2847   0D3B 7E          	.db	$7e		; ..############.. 
+2848   0D3C 7E          	.db	$7e		; ..############..
+2849   0D3D             
+2850   0D3D             				;; .org	$0d3d
+2851   0D3D             SHIP0:													; $0D3D
+2852   0D3D 05 0C       	.db	$05, $0c		; Size 5 x 12
+2853   0D3F 00 00 08 00 	.db	$00, $00, $08, $00, $00		; ................ ................ ......##........ ................ ................ 
+2853   0D43 00 
+2854   0D44 00 00 08 00 	.db	$00, $00, $08, $00, $00		; ................ ................ ......##........ ................ ................ 
+2854   0D48 00 
+2855   0D49 00 60 0E 00 	.db	$00, $60, $0e, $00, $00		; ................ ..........####.. ..######........ ................ ................ 
+2855   0D4D 00 
+2856   0D4E 00 E0 CE 3F 	.db	$00, $e0, $ce, $3f, $00		; ................ ..........###### ..######....#### ############.... ................ 
+2856   0D52 00 
+2857   0D53 00 E0 DE 03 	.db	$00, $e0, $de, $03, $00		; ................ ..........###### ..########..#### ####............ ................ 
+2857   0D57 00 
+2858   0D58 F8 F7 DF F7 	.db	$f8, $f7, $df, $f7, $0f		; ......########## ######..######## ##########..#### ######..######## ########........ 
+2858   0D5C 0F 
+2859   0D5D 80 F7 DF F7 	.db	$80, $f7, $df, $f7, $00		; ..............## ######..######## ##########..#### ######..######## ................ 
+2859   0D61 00 
+2860   0D62 FF FF FF FF 	.db	$ff, $ff, $ff, $ff, $ff		; ################ ################ ################ ################ ################ 
+2860   0D66 FF 
+2861   0D67 FF FF FF FF 	.db	$ff, $ff, $ff, $ff, $7f		; ################ ################ ################ ################ ##############.. 
+2861   0D6B 7F 
+2862   0D6C FF FF FF FF 	.db	$ff, $ff, $ff, $ff, $3f		; ################ ################ ################ ################ ############.... 
+2862   0D70 3F 
+2863   0D71 FE FF FF FF 	.db	$fe, $ff, $ff, $ff, $1f		; ..############## ################ ################ ################ ##########...... 
+2863   0D75 1F 
+2864   0D76 FE FF FF FF 	.db	$fe, $ff, $ff, $ff, $0f		; ..############## ################ ################ ################ ########........ 
+2864   0D7A 0F 
+2865   0D7B             
+2866   0D7B             SHIP1:													; $0D7C
+2867   0D7B 04 0C       	.db	$04, $0c		; Size 4 x 12
+2868   0D7D 00 00 03 00 	.db	$00, $00, $03, $00		; ................ ................ ####............ ................ 
+2869   0D81 00 36 03 00 	.db	$00, $36, $03, $00		; ................ ..####..####.... ####............ ................ 
+2870   0D85 00 36 03 00 	.db	$00, $36, $03, $00		; ................ ..####..####.... ####............ ................ 
+2871   0D89 02 B6 03 00 	.db	$02, $b6, $03, $00		; ..##............ ..####..####..## ####............ ................ 
+2872   0D8D 87 FF F3 07 	.db	$87, $ff, $f3, $07		; ######........## ################ ####....######## ######.......... 
+2873   0D91 E2 FF F7 00 	.db	$e2, $ff, $f7, $00		; ..##......###### ################ ######..######## ................ 
+2874   0D95 FF FF FF FF 	.db	$ff, $ff, $ff, $ff		; ################ ################ ################ ################ 
+2875   0D99 FF FF FF 7F 	.db	$ff, $ff, $ff, $7f		; ################ ################ ################ ##############.. 
+2876   0D9D FF FF FF 3F 	.db	$ff, $ff, $ff, $3f		; ################ ################ ################ ############.... 
+2877   0DA1 FC FF FF 1F 	.db	$fc, $ff, $ff, $1f		; ....############ ################ ################ ##########...... 
+2878   0DA5 FC FF FF 0F 	.db	$fc, $ff, $ff, $0f		; ....############ ################ ################ ########........ 
+2879   0DA9 F8 FF FF 07 	.db	$f8, $ff, $ff, $07		; ......########## ################ ################ ######.......... 
+2880   0DAD             
+2881   0DAD             SHIP2:													;	$0DAE
+2882   0DAD 05 0C       	.db	$05, $0c		; Size 5 x 12
+2883   0DAF 00 00 40 00 	.db	$00, $00, $40, $00, $00		; ................ ................ ............##.. ................ ................ 
+2883   0DB3 00 
+2884   0DB4 00 00 F0 00 	.db	$00, $00, $f0, $00, $00		; ................ ................ ........######## ................ ................ 
+2884   0DB8 00 
+2885   0DB9 00 00 F0 00 	.db	$00, $00, $f0, $00, $00		; ................ ................ ........######## ................ ................ 
+2885   0DBD 00 
+2886   0DBE 00 80 F0 1E 	.db	$00, $80, $f0, $1e, $00		; ................ ..............## ........######## ..########...... ................ 
+2886   0DC2 00 
+2887   0DC3 00 00 FB 06 	.db	$00, $00, $fb, $06, $00		; ................ ................ ####..########## ..####.......... ................ 
+2887   0DC7 00 
+2888   0DC8 FF FF FF FF 	.db	$ff, $ff, $ff, $ff, $ff		; ################ ################ ################ ################ ################ 
+2888   0DCC FF 
+2889   0DCD FC FF FF FF 	.db	$fc, $ff, $ff, $ff, $3f		; ....############ ################ ################ ################ ############.... 
+2889   0DD1 3F 
+2890   0DD2 FC FF FF FF 	.db	$fc, $ff, $ff, $ff, $1f		; ....############ ################ ################ ################ ##########...... 
+2890   0DD6 1F 
+2891   0DD7 FC FF FF FF 	.db	$fc, $ff, $ff, $ff, $0f		; ....############ ################ ################ ################ ########........ 
+2891   0DDB 0F 
+2892   0DDC F8 FF FF FF 	.db	$f8, $ff, $ff, $ff, $07		; ......########## ################ ################ ################ ######.......... 
+2892   0DE0 07 
+2893   0DE1 F8 FF FF FF 	.db	$f8, $ff, $ff, $ff, $03		; ......########## ################ ################ ################ ####............ 
+2893   0DE5 03 
+2894   0DE6 F8 FF FF FF 	.db	$f8, $ff, $ff, $ff, $03		; ......########## ################ ################ ################ ####............ 
+2894   0DEA 03 
+2895   0DEB             
+2896   0DEB             SHIP3:													; $0DEC
+2897   0DEB 04 0B       	.db	$04, $0b		; Size 4 x 11
+2898   0DED 40 00 00 02 	.db	$40, $00, $00, $02		; ............##.. ................ ................ ..##............ 
+2899   0DF1 40 80 00 02 	.db	$40, $80, $00, $02		; ............##.. ..............## ................ ..##............ 
+2900   0DF5 40 00 07 02 	.db	$40, $00, $07, $02		; ............##.. ................ ######.......... ..##............ 
+2901   0DF9 40 00 07 02 	.db	$40, $00, $07, $02		; ............##.. ................ ######.......... ..##............ 
+2902   0DFD 40 F0 07 02 	.db	$40, $f0, $07, $02		; ............##.. ........######## ######.......... ..##............ 
+2903   0E01 FC F0 07 F8 	.db	$fc, $f0, $07, $f8		; ....############ ........######## ######.......... ......########## 
+2904   0E05 FC FF FF 7F 	.db	$fc, $ff, $ff, $7f		; ....############ ################ ################ ##############.. 
+2905   0E09 FC FF FF 3F 	.db	$fc, $ff, $ff, $3f		; ....############ ################ ################ ############.... 
+2906   0E0D F8 FF FF 1F 	.db	$f8, $ff, $ff, $1f		; ......########## ################ ################ ##########...... 
+2907   0E11 F0 FF FF 0F 	.db	$f0, $ff, $ff, $0f		; ........######## ################ ################ ########........ 
+2908   0E15 F0 FF FF 0F 	.db	$f0, $ff, $ff, $0f		; ........######## ################ ################ ########........ 
+2909   0E19             
+2910   0E19             SHIP4:													; $0E1A
+2911   0E19 04 0B       	.db	$04, $0b		; Size 4 x 11
+2912   0E1B 80 00 00 00 	.db	$80, $00, $00, $00		; ..............## ................ ................ ................ 
+2913   0E1F 00 00 00 01 	.db	$00, $00, $00, $01		; ................ ................ ................ ##.............. 
+2914   0E23 A0 01 00 01 	.db	$a0, $01, $00, $01		; ..........##..## ##.............. ................ ##.............. 
+2915   0E27 A0 01 00 01 	.db	$a0, $01, $00, $01		; ..........##..## ##.............. ................ ##.............. 
+2916   0E2B F0 01 00 01 	.db	$f0, $01, $00, $01		; ........######## ##.............. ................ ##.............. 
+2917   0E2F F8 01 00 F9 	.db	$f8, $01, $00, $f9		; ......########## ##.............. ................ ##....########## 
+2918   0E33 F8 FF FF 7F 	.db	$f8, $ff, $ff, $7f		; ......########## ################ ################ ##############.. 
+2919   0E37 F0 FF FF 3F 	.db	$f0, $ff, $ff, $3f		; ........######## ################ ################ ############.... 
+2920   0E3B F0 FF FF 1F 	.db	$f0, $ff, $ff, $1f		; ........######## ################ ################ ##########...... 
+2921   0E3F F0 FF FF 0F 	.db	$f0, $ff, $ff, $0f		; ........######## ################ ################ ########........ 
+2922   0E43 E0 FF FF 0F 	.db	$e0, $ff, $ff, $0f		; ..........###### ################ ################ ########........ 
+2923   0E47             
+2924   0E47             SHIP5:													; $0E48
+2925   0E47 02 06       	.db	$02, $06		; Size 2 x 6
+2926   0E49 00 03       	.db	$00, $03		; ................ ####............ 
+2927   0E4B 10 07       	.db	$10, $07		; ........##...... ######.......... 
+2928   0E4D E0 FF       	.db	$e0, $ff		; ..........###### ################ 
+2929   0E4F FF 7F       	.db	$ff, $7f		; ################ ##############.. 
+2930   0E51 FF 3F       	.db	$ff, $3f		; ################ ############.... 
+2931   0E53 FF 1F       	.db	$ff, $1f		; ################ ##########...... 
+2932   0E55             
+2933   0E55             SINK:														; $0E56
+2934   0E55 02 0F       	.db	$02, $0f		; Size 2 x 15
+2935   0E57 10 00       	.db	$10, $00		; ........##...... ................ 
+2936   0E59 30 02       	.db	$30, $02		; ........####.... ..##............ 
+2937   0E5B 70 01       	.db	$70, $01		; ........######.. ##.............. 
+2938   0E5D FC 00       	.db	$fc, $00		; ....############ ................ 
+2939   0E5F F8 11       	.db	$f8, $11		; ......########## ##......##...... 
+2940   0E61 F0 3B       	.db	$f0, $3b		; ........######## ####..######.... 
+2941   0E63 E0 7F       	.db	$e0, $7f		; ..........###### ##############.. 
+2942   0E65 C0 3F       	.db	$c0, $3f		; ............#### ############.... 
+2943   0E67 80 1F       	.db	$80, $1f		; ..............## ##########...... 
+2944   0E69 00 3F       	.db	$00, $3f		; ................ ############.... 
+2945   0E6B 00 1E       	.db	$00, $1e		; ................ ..########...... 
+2946   0E6D 00 04       	.db	$00, $04		; ................ ....##.......... 
+2947   0E6F 00 48       	.db	$00, $48		; ................ ......##....##.. 
+2948   0E71 00 F8       	.db	$00, $f8		; ................ ......########## 
+2949   0E73 00 F8       	.db	$00, $f8		; ................ ......########## 
+2950   0E75             
+2951   0E75             SHOT0:													; E0E76
+2952   0E75 01 11       	.db	$01, $11									; Size 1 x 17
+2953   0E77 10          	.db	$10		; ........##...... 
+2954   0E78 38          	.db	$38		; ......######.... 
+2955   0E79 38          	.db	$38		; ......######.... 
+2956   0E7A 38          	.db	$38		; ......######.... 
+2957   0E7B 38          	.db	$38		; ......######.... 
+2958   0E7C 38          	.db	$38		; ......######.... 
+2959   0E7D 38          	.db	$38		; ......######.... 
+2960   0E7E 38          	.db	$38		; ......######.... 
+2961   0E7F 38          	.db	$38		; ......######.... 
+2962   0E80 38          	.db	$38		; ......######.... 
+2963   0E81 38          	.db	$38		; ......######.... 
+2964   0E82 38          	.db	$38		; ......######.... 
+2965   0E83 38          	.db	$38		; ......######.... 
+2966   0E84 10          	.db	$10		; ........##...... 
+2967   0E85 10          	.db	$10		; ........##...... 
+2968   0E86 10          	.db	$10		; ........##...... 
+2969   0E87 38          	.db	$38		; ......######.... 
+2970   0E88             
+2971   0E88             SHOT1:													; $0E89
+2972   0E88 01 0E       	.db	$01, $0e									; Size 1 x 14
+2973   0E8A 18          	.db	$18		; ......####...... 
+2974   0E8B 18          	.db	$18		; ......####...... 
+2975   0E8C 18          	.db	$18		; ......####...... 
+2976   0E8D 18          	.db	$18		; ......####...... 
+2977   0E8E 18          	.db	$18		; ......####...... 
+2978   0E8F 18          	.db	$18		; ......####...... 
+2979   0E90 18          	.db	$18		; ......####...... 
+2980   0E91 18          	.db	$18		; ......####...... 
+2981   0E92 18          	.db	$18		; ......####...... 
+2982   0E93 18          	.db	$18		; ......####...... 
+2983   0E94 18          	.db	$18		; ......####...... 
+2984   0E95 18          	.db	$18		; ......####...... 
+2985   0E96 00          	.db	$00		; ................ 
+2986   0E97 18          	.db	$18		; ......####...... 
+2987   0E98             
+2988   0E98             SHOT2:													; $0E99
+2989   0E98 01 09       	.db	$01, $09									; Size 1 x 9
+2990   0E9A 10          	.db	$10		; ........##...... 
+2991   0E9B 10          	.db	$10		; ........##...... 
+2992   0E9C 10          	.db	$10		; ........##...... 
+2993   0E9D 10          	.db	$10		; ........##...... 
+2994   0E9E 10          	.db	$10		; ........##...... 
+2995   0E9F 10          	.db	$10		; ........##...... 
+2996   0EA0 10          	.db	$10		; ........##...... 
+2997   0EA1 10          	.db	$10		; ........##...... 
+2998   0EA2 10          	.db	$10		; ........##...... 
+2999   0EA3             
+3000   0EA3             MINE:														; $0EA4
+3001   0EA3 01 10       	.db	$01, $10									; Size 1 x 16
+3002   0EA5 10          	.db	$10		; ........##...... 
+3003   0EA6 BA          	.db	$ba		; ..##..######..## 
+3004   0EA7 7C          	.db	$7c		; ....##########.. 
+3005   0EA8 FE          	.db	$fe		; ..############## 
+3006   0EA9 7C          	.db	$7c		; ....##########.. 
+3007   0EAA 38          	.db	$38		; ......######.... 
+3008   0EAB 54          	.db	$54		; ....##..##..##.. 
+3009   0EAC 10          	.db	$10		; ........##...... 
+3010   0EAD 00          	.db	$00		; ................ 
+3011   0EAE 10          	.db	$10		; ........##...... 
+3012   0EAF 00          	.db	$00		; ................ 
+3013   0EB0 08          	.db	$08		; ......##........ 
+3014   0EB1 00          	.db	$00		; ................ 
+3015   0EB2 00          	.db	$00		; ................ 
+3016   0EB3 04          	.db	$04		; ....##.......... 
+3017   0EB4 00          	.db	$00		; ................ 
+3018   0EB5             
+3019   0EB5             				
+3020   0EB5             				;; Table for $07CF
+3021   0EB5             L0EB5:
+3022   0EB5 3D 3E 3F    	.db	$3D, $3E, $3F		; TABLE
+3023   0EB8             
+3024   0EB8             LTBLANK:																				; $0EB8
+3025   0EB8 40 40 40 40 	.db	$40, $40, $40, $40, $40, $40, $40, $40		; ________
+3025   0EBC 40 40 40 40 
+3026   0EC0 40 40 40    	.db	$40, $40, $40															; ___
+3027   0EC3             
+3028   0EC3             LTOVER:																					; $0EC3
+3029   0EC3 47 41 4D 45 	.db	$47, $41, $4D, $45, $40, $4F, $56, $45		; GAME_OVE
+3029   0EC7 40 4F 56 45 
+3030   0ECB 52          	.db	$52																				; R
+3031   0ECC             
+3032   0ECC             LTHIGH:																					; $0ECC 
+3033   0ECC 48 49 47 48 	.db	$48, $49, $47, $48, $40, $53, $43, $4F		; HIGH_SCO
+3033   0ED0 40 53 43 4F 
+3034   0ED4 52 45 40 40 	.db	$52, $45, $40, $40, $40, $40, $40, $40		; RE______
+3034   0ED8 40 40 40 40 
+3035   0EDC 59 4F 55 52 	.db	$59, $4F, $55, $52, $40, $53, $43, $4F		; YOUR_SCO
+3035   0EE0 40 53 43 4F 
+3036   0EE4 52 45       	.db	$52, $45																	; RE
+3037   0EE6             
+3038   0EE6             LTCOIN:																					; $0EE6
+3039   0EE6 49 4E 53 45 	.db	$49, $4E, $53, $45, $52, $54, $40, $43		; INSERT_C
+3039   0EEA 52 54 40 43 
+3040   0EEE 4F 49 4E    	.db	$4F, $49, $4E															; OIN
+3041   0EF1             
+3042   0EF1             LTPUSH:																					; $0EF1 
+3043   0EF1 50 55 53 48 	.db	$50, $55, $53, $48, $40, $42, $55, $54		; PUSH_BUT
+3043   0EF5 40 42 55 54 
+3044   0EF9 54 4F 4E    	.db	$54, $4F, $4E															; TON
+3045   0EFC             
+3046   0EFC             LTSEA:																					; $0EFC 
+3047   0EFC 53 45 41 40 	.db	$53, $45, $41, $40, $57, $4F, $4C, $46		; SEA_WOLF
+3047   0F00 57 4F 4C 46 
+3048   0F04             
+3049   0F04             				;; Water?
+3050   0F04             L0F04:
+3051   0F04 3A 3B 3C 3B 	.db	$3A, $3B, $3C, $3B, $3C, $3A, $3B, $3C		; 
+3051   0F08 3C 3A 3B 3C 
+3052   0F0C 3A 3C 3B 3C 	.db	$3A, $3C, $3B, $3C, $3A, $3B, $3A, $3C		; 
+3052   0F10 3A 3B 3A 3C 
+3053   0F14 3B 3A 3C 3A 	.db	$3B, $3A, $3C, $3A, $3B, $3C, $3A, $3C		; 
+3053   0F18 3B 3C 3A 3C 
+3054   0F1C 3B 3C 3A 3B 	.db	$3B, $3C, $3A, $3B, $3C, $3A, $3B, $3C		; 
+3054   0F20 3C 3A 3B 3C 
+3055   0F24             
+3056   0F24             LTBONUS:																				; $0F24 
+3057   0F24 42 4F 4E 55 	.db	$42, $4F, $4E, $55, $53										; BONUS
+3057   0F28 53 
+3058   0F29             
+3059   0F29             LTTIME:																					; $0F29 
+3060   0F29 54 49 4D 45 	.db	$54, $49, $4D, $45												; TIME
+3061   0F2D 2D          	.db	$2D																				; <space>
+3062   0F2E 53 43 4F 52 	.db	$53, $43, $4F, $52, $45										; SCORE
+3062   0F32 45 
+3063   0F33             
+3064   0F33             LTEXT:																					; $0F33 
+3065   0F33             L0F33:
+3066   0F33 45 58 54 45 	.db	$45, $58, $54, $45, $4E, $44, $45, $44		; EXTENDED
+3066   0F37 4E 44 45 44 
+3067   0F3B 16          	.db	$16																				; <space>
+3068   0F3C 54 49 4D 45 	.db	$54, $49, $4D, $45     										; TIME
+3069   0F40             
+3070   0F40             				;; Table for $07B9
+3071   0F40             L0F40:
+3072   0F40 44 0F       	.dw	TZAP																			; ZAP
+3073   0F42 4C 0F       	.dw TWAM																			; WAM
+3074   0F44             
+3075   0F44             				;; Table from $0F40	(For ZAP)
+3076   0F44             TZAP:		
+3077   0F44 01 41 04 3D 	.db	$01, $41, $04, $3D, $5A, $2F, $50, $3F		; *ZAP*
+3077   0F48 5A 2F 50 3F 
+3078   0F4C             
+3079   0F4C             				;; Table from $0F42	(For WAM)
+3080   0F4C             TWAM:
+3081   0F4C 01 41 04 3D 	.db	$01, $41, $04,	$3D, $57, $2F, $4D, $3F		; *WAM*
+3081   0F50 57 2F 4D 3F 
+3082   0F54             
+3083   0F54             				;; 4-byte table (time per credit)
+3084   0F54             LDTIME:																					; $0F54 
+3085   0F54 61 71 81 91 	.db	$61, $71, $81, $91												; (Seconds) 
+3086   0F58             
+3087   0F58             				;; $0F57 = 8-byte score table (0 not used)
+3088   0F58             TSCORE:																					; $0F58
+3089   0F58 03 03 03 01 	.db	$03, $03, $03, $01, $01, $07		; 
+3089   0F5C 01 07 
+3090   0F5E             
+3091   0F5E             				;; Table for $05D2	(0x20 long)
+3092   0F5E             				;; Grey code decode
+3093   0F5E             TGREY:																					; $0F5E 
+3094   0F5E 00 08 18 10 	.db	$00, $08, $18, $10, $38, $30, $20, $28		; 
+3094   0F62 38 30 20 28 
+3095   0F66 78 70 60 68 	.db	$78, $70, $60, $68, $40, $48, $58, $50		; 
+3095   0F6A 40 48 58 50 
+3096   0F6E F8 F0 E0 E8 	.db	$F8, $F0, $E0, $E8, $C0, $C8, $D8, $D0		; 
+3096   0F72 C0 C8 D8 D0 
+3097   0F76 80 88 98 90 	.db	$80, $88, $98, $90, $B8, $B0, $A0, $A8		; 
+3097   0F7A B8 B0 A0 A8 
+3098   0F7E             
+3099   0F7E             
+3100   0F7E             				;; Ship tables
+3101   0F7E             				;; 00-01	= Sprite address
+3102   0F7E             				;; 02			= $20 = Right to Left, $40 = Left to Right
+3103   0F7E             				;; 03 		= Initial Y
+3104   0F7E             				;; 04 		= Delta Y (Always 0 for ships)
+3105   0F7E             				;; 05			= Final X
+3106   0F7E             				;; 06			= Initial X
+3107   0F7E             				;; 07			= Delta X
+3108   0F7E             	
+3109   0F7E             				;; Even ship table
+3110   0F7E             L0F7E:
+3111   0F7E 0D 3D       	.db	(SHIP0>>8), SHIP0
+3112   0F80 20 14 00 D8 	.db	$20, $14, $00, $D8, $00, $02							; Ship 0
+3112   0F84 00 02 
+3113   0F86 0D 7B       	.db	(SHIP1>>8), SHIP1
+3114   0F88 20 14 00 E0 	.db	$20, $14, $00, $E0, $00, $02							; Ship 1
+3114   0F8C 00 02 
+3115   0F8E 0D AD       	.db	(SHIP2>>8), SHIP2
+3116   0F90 20 14 00 D8 	.db	$20, $14, $00, $D8, $00, $02							; Ship 2
+3116   0F94 00 02 
+3117   0F96 0D EB       	.db	(SHIP3>>8), SHIP3
+3118   0F98 20 15 00 E0 	.db	$20, $15, $00, $E0, $00, $01							; Ship 3
+3118   0F9C 00 01 
+3119   0F9E 0E 19       	.db	(SHIP4>>8), SHIP4
+3120   0FA0 20 15 00 E0 	.db	$20, $15, $00, $E0, $00, $01							; Ship 4
+3120   0FA4 00 01 
+3121   0FA6 0E 47       	.db	(SHIP5>>8), SHIP5
+3122   0FA8 20 1A 00 F0 	.db	$20, $1A, $00, $F0, $00, $03							; Ship 5
+3122   0FAC 00 03 
+3123   0FAE             
+3124   0FAE             				;; Odd ship table
+3125   0FAE             L0FAE:
+3126   0FAE 0D 3D       	.db	(SHIP0>>8), SHIP0
+3127   0FB0 40 34 00 D8 	.db $40, $34, $00, $D8, $D8, $FE							; Ship 0
+3127   0FB4 D8 FE 
+3128   0FB6 0D 7B       	.db (SHIP1>>8), SHIP1
+3129   0FB8 40 34 00 E0 	.db	$40, $34, $00, $E0, $E0, $FE							; Ship 1
+3129   0FBC E0 FE 
+3130   0FBE 0D AD       	.db (SHIP2>>8), SHIP2
+3131   0FC0 40 34 00 D8 	.db	$40, $34, $00, $D8, $D8, $FE							; Ship 2
+3131   0FC4 D8 FE 
+3132   0FC6 0D EB       	.db (SHIP3>>8), SHIP3
+3133   0FC8 40 35 00 E0 	.db	$40, $35, $00, $E0, $E0, $FF							; Ship 3
+3133   0FCC E0 FF 
+3134   0FCE 0E 19       	.db (SHIP4>>8), SHIP4
+3135   0FD0 40 35 00 E0 	.db	$40, $35, $00, $E0, $E0, $FF							; Ship 4
+3135   0FD4 E0 FF 
+3136   0FD6 0E 47       	.db (SHIP5>>8), SHIP5
+3137   0FD8 40 3A 00 F0 	.db	$40, $3A, $00, $F0, $F0, $FD							; Ship 5
+3137   0FDC F0 FD 
+3138   0FDE             
+3139   0FDE             	
+3140   0FDE             				;; Ship type table
+3141   0FDE             L0FDE:
+3142   0FDE 06          	.db	$06																				; Small, fast
+3143   0FDF 04          	.db	$04																				; Mid, 2 towers
+3144   0FE0 02          	.db	$02																				; Cross in back
+3145   0FE1 06          	.db	$06																				; Small, fast
+3146   0FE2 03          	.db	$03																				; Big, flat top
+3147   0FE3 05          	.db	$05																				; Tower in back
+3148   0FE4 01          	.db	$01																				; Battleship
+3149   0FE5             	
+3150   0FE5 FF          	rst  38
+3151   0FE6 FF          	rst  38
+3152   0FE7 FF          	rst  38
+3153   0FE8 FF          	rst  38
+3154   0FE9 FF          	rst  38
+3155   0FEA FF          	rst  38
+3156   0FEB FF          	rst  38
+3157   0FEC FF          	rst  38
+3158   0FED FF          	rst  38
+3159   0FEE FF          	rst  38
+3160   0FEF FF          	rst  38
+3161   0FF0 FF          	rst  38
+3162   0FF1 FF          	rst  38
+3163   0FF2 FF          	rst  38
+3164   0FF3 FF          	rst  38
+3165   0FF4 FF          	rst  38
+3166   0FF5 FF          	rst  38
+3167   0FF6 FF          	rst  38
+3168   0FF7 FF          	rst  38
+3169   0FF8 FF          	rst  38
+3170   0FF9 FF          	rst  38
+3171   0FFA FF          	rst  38
+3172   0FFB FF          	rst  38
+3173   0FFC FF          	rst  38
+3174   0FFD FF          	rst  38
+3175   0FFE FF          	rst  38
+3176   0FFF FF          	rst  38
+3177   1000             				
+3178   1000             .end
+3179   1000             			tasm: Number of errors = 0
