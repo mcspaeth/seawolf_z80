@@ -1,0 +1,14 @@
+#!/bin/csh
+tasm -80 -b -fff seawolf.asm
+
+cat seawolf.obj | ../swaddchk > seawolf.bin
+
+dd if=seawolf.bin of=../sw0041.h bs=1024 count=1
+dd if=seawolf.bin of=../sw0042.g bs=1024 count=1 skip=1
+dd if=seawolf.bin of=../sw0043.f bs=1024 count=1 skip=2
+dd if=seawolf.bin of=../sw0044.e bs=1024 count=1 skip=3
+
+dd if=seawolf.bin of=../wolf2716.h bs=2048 count=1
+dd if=seawolf.bin of=../wolf2716.g bs=2048 count=1 skip=1
+
+zip seawolf.zip ../sw0041.h ../sw0042.g ../sw0043.f ../sw0044.e ../wolf2716.h ../wolf2716.g
