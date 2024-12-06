@@ -4,13 +4,19 @@
 				;; Programmed for tasm z80 mode using only 8080 instructions
 
 				;; Config variables
-				;; Original release: SC3DIG=0, OLDDIP=1, OLDINT=1, OLDTEST=1
-				;; 3 digit scoring:  SC3DIG=1, OLDDIP=1, OLDINT=0, OLDTEST=0
+				;; Original release: SC3DIG=0, OLDDIP=1, OLDINT=1, OLDTEST=1, MINEFIX=0
+				;; 3 digit scoring:  SC3DIG=1, OLDDIP=1, OLDINT=0, OLDTEST=0, MINEFIX=0
+
 SC3DIG	= 1											; 3 digit scoring, simplified coinage
-OLDDIP	= 1											; Table lookup vs calculated DIPs
+OLDDIP	= 0											; Table lookup vs calculated DIPs
 OLDINT	= 0											; Exclude interpreter changes that save bytes
 OLDTEST	= 0											; Use $0200 byte self test routine
-
+GETMAC	= 0											; Use jsr for GETBC, GETDE (saves 1 byte per -- unneeded)
+MOREEXP	= 1											; More mine explosion text
+MINEFIX	= 1											; Fix the mines jumping on reload
+DOCOPY	= 1											; Add copyright to self test
+HSSAVE	= 0											; Prevent HS from being cleared at reset
+				
 				;; Graphics changes
 OLDMINE	= 1											; Use original mine gfx
 SW2024	= 0											; Change Q to '24
@@ -24,13 +30,13 @@ TINC		= $001E									; Torpedo entry length
 				;; Memory locations
 PRGPTR	= $2000									; $2000-2001
 
-
 #IF SC3DIG
+HSCORE	= $2002									; Was $2006
+HSCOREH	= HSCORE+1							; High byte
 GTIME		= $2004									; Was $2002
 TIMER		= $2005									; Was $2003
 CREDIT	= $2006									; Was $2005, half credit not used
-HSCORE	= $2002									; Was $2006
-HSCOREH	= HSCORE+1							; High byte
+MISSED	= $200E									; (Previously unused)
 PSCORE	= $2012									; Was $202B
 PSCOREH	= PSCORE+1							; High byte
 TXTBUF	= $21E8									; Space for 1 more digit
@@ -60,12 +66,12 @@ ATIMER	= $2025									; Audio timer
 SHIPA0	= $2031									; Base address of ship A
 SHIPA1	= SHIPA0+SINC						; $203E ($0d block)
 SHIPA2	= SHIPA1+SINC						; $204B ($0d block)
-SHIPAX	= SHIPA2+SINC						; $2058 ($0d block)
+SHIPAX	= SHIPA2+SINC						; Reset to $2031 if here
 
 SHIPB0	= $2058									; Base address of ship B
 SHIPB1	= SHIPB0+SINC						; $2065 ($0d block)
 SHIPB2	= SHIPB1+SINC						; $2072 ($0d block)
-SHIPBX	= SHIPB2+SINC						; $207F ($0d block)
+SHIPBX	= SHIPB2+SINC						; Reset to $2058 if here
 
 MINES		= $207F									; Base address of mines
 MINEX		= MINES+(8*MINC)				; $20E7 (8x $0d blocks)
@@ -74,6 +80,19 @@ TORPS		= $20E7									; Base address of torpedos
 TORPX		= TORPS+(4*TINC)				; $215F (4x $1e blocks)
 
 HMISS		= $21F0
+
+
+				;; Screen addresses for text
+WAVLOC	= $27E0									; Loc for "Wave"
+GOTLOC	= $2C0B									; Loc for GAME OVER text
+SWLTOC	= $2C0C									; Loc for SEA WOLF text
+ERRLOC	= $3008									; Loc for ROM errors
+COPYLOC	= $3408									; Loc for Copyright
+ICTLOC	= $3833									; Loc for Insert Coin / Press Start
+HSTLOC	= $3C02									; Loc for HIGH SCORE text
+TSTLOC	= $3C0E									; Loc for TIME/SCORE text
+HSLOC		= $3E25									; Loc for high score
+PSLOC		= $3E36									; Loc for player score
 
 				;; out 01    = Explosion matrix
 				;; out 02    = Torpedo display
@@ -92,19 +111,20 @@ HMISS		= $21F0
 				;; 2006      = High score byte
 				;; 2007      = Last IN1
 				;; 2008      = Last IN0
+				;; 2009-200a = End game hl pointer store (deprecated)
 				;; 200e-200f = Unused?
 				;; 2010      = Down counter (when $2003 == 0)
 				;; 2011      = Down counter
 				;; 2012-2013 = (Not used?)
-				;; 2014-2015 = Sprite draw handle
-				;; 2016-2017 = Ship 0  handle
-				;; 2018-2019 = Ship 1  handke
-				;; 201a-201b = Torpedo handle 
+				;; 2014-2015 = MINE table pointer (last updated)
+				;; 2016-2017 = TORP table pointer (last updated)
+				;; 2018-2019 = SHIPA table pointer
+				;; 201a-201b = SHIPB Table pointer
 				;; 201c      = Next sprite?
 				;; 201e      = ??
-				;; 201f      = Draw / not draw for flashing?
+				;; 201f      = Later interrupt called ($00 = rst $08, $FF = rst $10)
 
-				;; 2020 = Mask for subs to call at 04ce (when [[$2000]] == 00)
+				;; 2020      = Mask for subs to call at 04ce (when [[$2000]] == 00)
 				;;             D7 = $2002, D6 = $2010, D5 = $2011, D4 = $2021
 				;;             D3 = $2022, D2 = $2023, D1 = $2024, D0 = $2025
 				;; 2021      = Down counter (non-zero inhibits fire)
@@ -131,8 +151,8 @@ HMISS		= $21F0
 				;;		Byte 5   = Y Pos  loc-$2400)>>5
 				;;		Byte 6   = ??
 				;;		Byte 7-8 = Sprite tbl LSB,MSB
-				;;		Byte 9-A = (address -> de -> hl)
-				;;		Byte C-D = (read into bc)
+				;;		Byte 9-A = Calculated screen location
+				;;		Byte C-D = Calculated sprite size
 				;; 203E-204A = Sprite ($0d block)
 				;; 204B-2057 = Sprite ($0d block)
 				;; 2058-2064 = Ship data 0 (Attract?)
@@ -150,7 +170,7 @@ HMISS		= $21F0
 
 				;; 20c9-20e6
 
-				;; Torpedo control?
+				;; Torpedo control
 				;; 20e7-2104 = $1e data block
 				;; 2105-2122 = $1e data block
 				;; 2123-2140 = $1e data block
@@ -158,7 +178,7 @@ HMISS		= $21F0
 
 				;; 215f-21a3 = $44 data block, cleared at $0088
 
-				;; 21e9-21ef = 7 character buffer for time+score
+				;; 21e8-21ef = 8 character buffer for time+score
 				;; 21f0-21f1 = Address for $0A3F clear if non-zero
 				;; 21f2-21f3 = Address for $0A3F clear if non-zero
 				;; 21f4-21f5 = Address for $0A3F clear if non-zero
@@ -194,7 +214,7 @@ RST10:
 				call		L03BC						; Update wave
 				call		L012E						; Update a sprite
 
-				ld			hl,($2016)			; Sprite pointer
+				ld			hl,(HTORP)			; Torpedo handle
 				ld			a,(hl)
 				and			a
 				jp			p,L0036					; D7=0 = inactive
@@ -212,7 +232,7 @@ L0036:
 				jp			L0069						; End of interrupt routine
 
 L003E:
-				ld			hl,($2016)			; Sprite pointer
+				ld			hl,(HTORP)			; Torpedo handle
 				ld			a,(hl)
 				and			a
 				jp			p,L0062					; D7=0 = inactive
@@ -223,20 +243,20 @@ L003E:
 				jp			L0062
 
 L0050:
-				ld			a,(hl)					; Set flags bit 5
-				or			$20
+				ld			a,(hl)					; Flags
+				or			$20							; Set SUNK flag
 				ld			(hl),a
 				call		L0165						; Update sprite
 				ld			a,b
 				push		hl
-				ld			hl,($201C)			; ($201C) to bc
+				ld			hl,(HSUNK)			; (HSUNK) to bc
 				ld			b,h
 				ld			c,l
 				pop			hl
 				call		L0A16
 
 L0062:
-				call		L0368
+				call		L0368						; Handle ($2020) flags
 				xor			a
 				ld			($201F),a
 
@@ -257,7 +277,6 @@ L0069:
 				ei
 				ret
 
-
 				;; Interrupt $08 vector continues...
 L007E:
 				ld			a,($201F)
@@ -275,16 +294,16 @@ L008E:
 				dec			b
 				jp			nz,L008E
 
-				ld			hl,($2018)			; Sprite pointer 0
+				ld			hl,(HSHIPA)			; SHIPA handle
 				ld			a,$03						; Loop counter 
 L0099:
 				push		af
 				ld			a,l
-				cp			$58							; Cycles $2031 / $203E / $204B
+				cp			SHIPAX&$FF			; Cycles $2031 / $203E / $204B
 				jp			nz,L00A3
 
 L00A0:
-				ld			hl,$2031				; Resets to $2031
+				ld			hl,SHIPA0				; Resets to $2031
 L00A3:
 				or			h
 				jp			z,L00A0					; If was $0000, init as $2013
@@ -294,27 +313,26 @@ L00A3:
 				pop			hl
 				jp			nc,L00B2
 
-				ld			($2018),hl			; Store sprite pointer 0
+				ld			(HSHIPA),hl			; SHIPA handle
 L00B2:
-				ld			de,$000D				; Sprite increment
+				ld			de,SINC					; Sprite increment
 				add			hl,de
 				pop			af
 				dec			a
 				jp			nz,L0099				; Loop back
 
-				ld			hl,($2018)			; Sprite pointer 0
-				call		L030C
-
-				ld			hl,($201A)			; Sprite pointer 1
+				ld			hl,(HSHIPA)			; SHIPA handle
+				call		L030C						; Erase if sunk
+				ld			hl,(HSHIPB)			; SHIPB handle
 
 				ld			a,$03						; Loop counter
 L00C6:
 				push		af
 				ld			a,l
-				cp			$7F							; Cycloes $2058 / $2065 / $2072
+				cp			SHIPBX&$FF			; Cycloes $2058 / $2065 / $2072
 				jp			nz,L00D0
 L00CD:
-				ld			hl,$2058				; Reset to $2058
+				ld			hl,SHIPB0				; Reset to $2058
 L00D0:
 				or			h
 				jp			z,L00CD					; If was $0000, init as $2058
@@ -324,9 +342,9 @@ L00D0:
 				pop			hl
 				jp			nc,L00DF
 
-				ld			($201A),hl			; Store sprite pointer 1
+				ld			(HSHIPB),hl			; SHIPB handle
 L00DF:
-				ld			de,$000D				; Sprite increment
+				ld			de,SINC					; Sprite increment
 				add			hl,de
 				pop			af
 				dec			a
@@ -335,16 +353,16 @@ L00DF:
 				xor			a
 				ld			($2030),a				; Clear sprite shift
 
-				ld			hl,($2016)			; Pointer?
+				ld			hl,(HTORP)			; Torpedo handle
 				ld			a,$04						; Loop counter
 L00F1:
 				push		af
 				ld			a,l
-				cp			$5F							; Cycles $20E7 / $2105 / $2123 / $2140
+				cp			TORPX&$FF				; Cycles $20E7 / $2105 / $2123 / $2140
 				jp			nz,L00FB
 
 L00F8:
-				ld			hl,$20E7				; Reset to $20E7
+				ld			hl,TORPS				; Reset to $20E7
 L00FB:
 				or			h
 				jp			z,L00F8					; If was $0000, init to $20E7
@@ -354,44 +372,46 @@ L00FB:
 				pop			hl
 				jp			nc,L010A
 
-				ld			($2016),hl			; Update pointer
+				ld			(HTORP),hl			; Torpedo handle
 L010A:
-				ld			de,$001E				; Torp increment
+				ld			de,TINC					; Torp increment
 				add			hl,de
 				pop			af
 				dec			a
 				jp			nz,L00F1				; Loop back
 
-				call		L0331						; Update sprites
+				call		L0331						; Update mines
 				jp			L0069						; End of interrupt routine
 
 
 L0119:
-				ld			hl,($201A)			; Ship 1 pointer
-				call		L030C
+				ld			hl,(HSHIPB)			; SHIPB handle
+				call		L030C						; Erase if sunk
 
-				ld			hl,($201A)			; Ship 1 pointer
+				ld			hl,(HSHIPB)			; SHIPB handle
 				call		L013A
 
-				ld			hl,($2018)			; Ship 0 pointer
+				ld			hl,(HSHIPA)			; SHIPA handle
 				call		L013A
 
 				jp			L0069						; End of interrupt routine
 
-
 				;; Called from rst $10
-				;; Handle $2014 handle
+				;; Update and draw a single mine
 L012E:
-				ld			hl,($2014)
+				ld			hl,(HMINE)
 				ld			a,(hl)
 				and			a
 				ret			p								; D7 clear = inactive
 
-				call		L0165						; Update sprite
-				jp			L0192						; Draw sprite
+#IF MINEFIX
+				jp			DRAWOBJ
+#ELSE
+				call		L0165						; Update mine
+				jp			L0192						; Draw mine
+#ENDIF
 
-
-				;; Handle $2018 / $201a entries
+				;; Handle SHIPA / SHIPB entries
 L013A:
 				ld			a,(hl)
 				and			a
@@ -406,8 +426,10 @@ L0145:
 				ld			a,(hl)
 				or			$20							; Set bit 5 
 				ld			(hl),a
+
+DRAWOBJ:
 				push		af
-				call		L0165						; Update sprite
+				call		L0165						; Update sprite params
 				;; hl = screen loc, c=shift on return
 
 				pop			af
@@ -438,33 +460,51 @@ L0165:
 				ld			d,(hl)					; MSB of loc
 				inc			hl
 				inc			hl
-				call		L0A00						; de >> 3, e&3 -> c
+				call		L0A00						; Get address for shifted data
 
 				ld			a,c							; (shift)
-				ld			($2030),a
+				ld			($2030),a				; Shift value
 				out			($04),a					; Shifter count
 				push		de							; Push screen loc
+
+#IF GETMAC
+				call		GETDE
+#ELSE
 				ld			e,(hl)					; Get spite data loc
 				inc			hl
 				ld			d,(hl)
 				inc			hl
+#ENDIF
+
 				ex			de,hl						; rom loc -> hl
+
+#IF GETMAC
+				call		GETBC
+#ELSE
 				ld			c,(hl)					; Read sprite size
 				inc			hl
 				ld			b,(hl)
 				inc			hl
+#ENDIF
+
 				ex			(sp),hl					; hl = screen loc
 				ex			de,hl						; hl Back to ram table
+
+#IF GETMAC
+				call		GETDE
+#ELSE
 				ld			(hl),e
 				inc			hl
 				ld			(hl),d
 				inc			hl
+#ENDIF
+
 				ld			(hl),c					; Width
 				inc			(hl)						; +1 wide for shifting?
 				inc			hl
 				ld			(hl),b					; Height
 				inc			hl
-				ld			($201C),hl			; Store next
+				ld			(HSUNK),hl			; Store next
 
 				ex			de,hl						; hl = screen loc
 				pop			de							; de = sprite data in ROM
@@ -480,7 +520,7 @@ L0194:
 				inc			de
 				out			($03),a					; MB12421 data write
 				in			a,($03)					; MB12421 data read
-				ld			(hl),a					; Write to RAM
+				ld			(hl),a					; Write to screen
 				inc			hl
 				dec			c
 				jp			nz,L0194				; Loop for width
@@ -489,7 +529,7 @@ L0194:
 				out			($03),a					; MB12421 data write
 				in			a,($03)					; MB12421 data read
 				ld			(hl),a					; Final write
-				ld			bc,$0020				; Row increment
+				ld			bc,RINC					; Row increment
 				pop			hl
 				add			hl,bc						; Next row
 				pop			bc
@@ -513,15 +553,15 @@ L01BA:
 				ld			(hl),a					; Write to screen
 				dec			hl
 				dec			c
-				jp			nz,L01BA				; Loop for row
+				jp			nz,L01BA				; Loop for width
 
 				xor			a
 				out			($03),a					; Shifter input 
 				in			a,($00)					; Shifter output
 				ld			(hl),a					; Write to screen
-				ld			bc,$0020				; Next line
+				ld			bc,RINC					; Row increment
 				pop			hl
-				add			hl,bc
+				add			hl,bc						; Next line
 				pop			bc
 				ld			a,l
 				and			$E0
@@ -572,7 +612,7 @@ L01F8:
 L0207:
 				ex			(sp),hl
 				ld			a,(hl)
-				and			$BF							; Clear bit 5 (Ship done?)
+				and			$BF							; Clear bit 5 (Ship done)
 				ld			(hl),a
 				ex			(sp),hl
 				jp			L0216
@@ -588,7 +628,7 @@ L0216:
 				rrca
 				rrca
 				rrca
-				and			$1F							; High 5 bits of (hL)
+				and			$1F							; High 5 bits of (hl)
 				add			a,e
 				ld			e,a
 				ex			(sp),hl
@@ -798,7 +838,7 @@ L0309:
 				ret
 
 
-				;; Erase ship from hl
+				;; Erase ship from hl if sunk
 L030C:
 				ld			a,(hl)					; Sprite flags
 				and			a
@@ -822,7 +862,7 @@ L0319:
 				dec			c
 				jp			nz,L0319
 
-				ld			de,$0020				; Line increment
+				ld			de,RINC					; Row increment
 				pop			hl							; Get loc
 				add			hl,de						; Next line
 				ld			c,b
@@ -836,48 +876,67 @@ L0319:
 
 				ret
 
-				;; Update sprites
+				;; Update mines
 L0331:
-				ld			hl,($2014)
-				ld			b,$0A						; Loop counter = 10 sprites
+				ld			hl,(HMINE)
+;				ld			b,$0A						; Loop counter = 10 mines
+				ld			b,$08						; Loop counter =  8 mines
 				ld			a,l
 				or			h
 				jp			nz,L033E
 
-				ld			hl,$2072				; If 0 reset to $2072
+				ld			hl,MINES-MINC		; If 0 reset to $2072
 L033E:
-				ld			de,$000D				; Sprite increment
+				ld			de,MINC					; Mine increment
 L0341:
-				add			hl,de
+				add			hl,de						; $207F / $207C / $2099 / $20A6 / $20B3 / $20C0 / $20CD / $20DA
 				dec			b
 				ret			z								; End of loop
 
 				ld			a,l
-				cp			$E7							; hl == $20E7?
+				cp			MINEX&$FFF			; hl == $20E7?
 				jp			nz,L034D
 
-				ld			hl,$207F				; Reset to $207F
+				ld			hl,MINES				; Reset to $207F
 L034D:
+				;; Check logic here
+#IF 1-MINEFIX
 				ld			a,(hl)					; X flags
 				and			a
 				jp			p,L0341					; D7 clear = not active
+#ENDIF
 
-				ld			($2014),hl
+				ld			(HMINE),hl
 				inc			hl
 				ld			a,(hl)					; Delta X
 				inc			hl
 				add			a,(hl)					; Add to X
 				ld			(hl),a					; Store X
+
+#IF MINEFIX
+				dec			hl
+				dec			hl
+				ld			a,(hl)
+				and			a
+				jp			p,L0341					; Loop until we get an active mine
+#ENDIF
+
 				ret
 
 				;; Load de, bc from ship data
 L035B:
 				ld			de,$0009
 				add			hl,de
+
+#IF GETMAC
+				call		GETDE
+#ELSE
 				ld			e,(hl)
 				inc			hl
 				ld			d,(hl)
 				inc			hl
+#ENDIF
+
 GETBC:
 				ld			c,(hl)
 				inc			hl
@@ -887,7 +946,7 @@ GETBC:
 
 				;; Called from ISR
 L0368:
-				ld			a,($2020)
+				ld			a,($2020)				; ISR flags
 				and			a
 				ret			nz
 
@@ -898,24 +957,26 @@ L0368:
 
 				;; $2003 Counter zero
 				ld			(hl),$1E				; Reset counter
+
 				ld			hl,GTIME				; Game timer
 				ld			a,(hl)
 				and			a
 				jp			z,L0388					; Game over
 
-				add			a,$99
+				add			a,$99						; BCD derement
 				daa
-				ld			(hl),a					; Decrement game timer
+				ld			(hl),a					; Store timer
+				and			a								; Z should be set by daa (!)
 				jp			nz,L0388
 
 				ld			b,$01						; set d7 (eventually) = Game over
 L0388:
-				ld			hl,$2010
+				ld			hl,TIMER1
 				call		L03AE						; Handle $2010 timer d6
 
 				;; Counter non-zero
 L038E:
-				ld			hl,$2011 
+				ld			hl,TIMER2
 				call		L03AE						; Handle $2011 timer d5
 				ld			hl,$2021
 				call		L03AE						; Handle $2021 timer d4
@@ -970,10 +1031,10 @@ L03C8:
 				ld			(bc),a					; Save state
 
 				;; Screen location
-				ld			hl,$27E0
+				ld			hl,WAVLOC
 				add			a,l
 				ld			l,a
-				ld			bc,$0020				; Row increment
+				ld			bc,RINC					; Row increment
 L03DF:
 				ld			a,(de)					; Get byte
 				inc			de
@@ -988,6 +1049,13 @@ L03DF:
 
 				;; Test mode
 L03EC:
+#IF DOCOPY
+				ld			hl,COPYRGHT
+				ld			de,COPYLOC
+				ld			a,$0C						; Length
+				call		L0B30						; Draw string
+#ENDIF
+
 				ld			hl,L0000				; Start address
 				ld			de,$0000				; Offset 0
 #IF OLDTEST
@@ -1038,7 +1106,7 @@ L040E:
 				jp			nz,L03F4				; Loop if not done
 
 				ld			hl,TXTBUF				; Text buffer
-				ld			de,$3008				; Location
+				ld			de,ERRLOC				; Location
 #IF OLDTEST
 				ld			a,$08						; Length
 #ELSE
@@ -1063,18 +1131,33 @@ ERRS:
 
 				;; Initial jump
 L043A:
-				call		 L08A2					; (End of game routine)
+				call		L08A2						; (End of game routine)
 				in			a,($02)					; IN2
+
+#IF OLDDIP
 				and			$E0							; Test mode bits
 				cp			$E0
+#ELSE
+				and			$08							; Dip 4 = Test
+				cp			$08
+#ENDIF
+
 				call		z,L03EC					; Go to test mode
 
 				;; Clear $2002-$200a
-				ld			hl,GTIME
+				;; Change this for HS Save?
+
 #IF SC3DIG
-				ld			a,$07
+#IF HSSAVE
+				ld			hl,GTIME				; $2004
+				ld			a,$07						; $2004-$200a
 #ELSE
-				ld			a,$09
+				ld			hl,HSCORE				; $2002
+				ld			a,$09						; $2002-$200a
+#ENDIF
+#ELSE
+				ld			hl,GTIME				; $2002
+				ld			a,$09						; $2002-$200a
 #ENDIF
 				ld			b,$00
 L044D:
@@ -1088,13 +1171,13 @@ L044D:
 #ENDIF
 
 				ld			hl,L0929				; Attract mode loop
-				ld			($2000),hl
+				ld			(PRGPTR),hl
 
 L0459:
 				ei											; Enable interrupts
 				ld			hl,L0459				; Return address
 				push		hl
-				ld			hl,($2000)
+				ld			hl,(PRGPTR)
 				ld			a,(hl)					; Get command
 				and			a
 				jp			nz,L047D				; Non-zero command
@@ -1103,7 +1186,7 @@ L0459:
 				;; Command 0
 				call		L06A4
 				call		L04CE
-				call		L04BF
+				call		L04BF						; Start game
 				ld			a,(GTIME)				; Game timer
 				and			a
 				ret			z								; Skip rest if game over
@@ -1184,7 +1267,7 @@ L04BF:
 
 				ld			(hl),$00				; Clear
 				ld			hl,L09A6				; Game over mode
-				ld			($2000),hl			; Write mode
+				ld			(PRGPTR),hl			; Write mode
 				ret
 
 				;; Choose subroutine based on $2020 bits
@@ -1297,13 +1380,13 @@ L0543:
 				ld			($2021),a
 				ld			($202D),a				; Torpedo status
 				ld			a,$01
-				ld			(GTIME),a				; Why are we adding a second?
+				ld			(GTIME),a				; Let torps finish
 				ret
 
 				;; Check if new high score
 L055C:
-				ld			hl,L0929
-				ld			($2000),hl			; Next command
+				ld			hl,L0929				; Attract mode
+				ld			(PRGPTR),hl			; Next command
 
 #IF SC3DIG
 				ld			a,(PSCORE+1)		; Score hi byte
@@ -1331,16 +1414,16 @@ HSDOLO:
 				;; Bit 6 set on $2020
 				;; Initialize $2000 address
 L056C:
-				ld			hl,L0963				; End of game
-				ld			($2000),hl
+				ld			hl,L0963				; Game over
+				ld			(PRGPTR),hl
 				ret
 
 				;; Bit 5 set on $2020
 				;; Increment $2000 address
 L0573:
-				ld			hl,($2000)			; After 2011 timer?
+				ld			hl,(PRGPTR)			; After 2011 timer?
 				inc			hl
-				ld			($2000),hl
+				ld			(PRGPTR),hl
 				ret
 
 
@@ -1530,10 +1613,10 @@ L064A:
 				ld			(ATIMER),a			; Set timer
 				ld			a,b							; Ship type
 
-				;; hl = $202c + $0d * a 
+				;; hl = $2031 - $0d + $08 + $0d * a 
 L066B:
-				ld			hl,$202C
-				ld			de,$000D				; Sprite increment
+				ld			hl,SHIPA0-SINC+$08			; ROM loc in sprite table
+				ld			de,SINC					; Sprite increment
 L0671:
 				add			hl,de
 				dec			a
@@ -1597,7 +1680,7 @@ L06A7:
 
 				;; hl = $2024 + $d * a
 				ld			hl,SHIPA0-SINC	; No 0 element
-				ld			bc,$000D				; Sprite entry length
+				ld			bc,SINC					; Sprite entry length
 L06B5:
 				add			hl,bc
 				dec			a
@@ -1661,16 +1744,21 @@ L06DB:
 
 #IF SC3DIG
 				jp			nc,NOCARRY
-				inc			hl
-				inc			(hl)						; Increment hi byte
+				inc			hl							; Store MSB
+				inc			(hl)						; Increment
 
 NOCARRY:
 #ENDIF
 				pop			hl
+
+#IF GETMAC
+				call		GETBC
+#ELSE
 				ld			c,(hl)					; Get bc from table
 				inc			hl
 				ld			b,(hl)
 				inc			hl
+#ENDIF
 
 				push		hl
 				ld			a,b
@@ -1717,7 +1805,7 @@ L0735:
 				or			$A0							; Set bits 7,5 
 				ld			e,a
 
-				call		L07DB						; Find first de?
+				call		L07DB						; de to first empty missle slot
 
 				ld			a,$2D
 				ld			($2024),a				; Set timer (for showing score)
@@ -1728,8 +1816,10 @@ L0735:
 				pop			hl
 				jp			L06A7
 
+
+				;; Mine collision detection?
 L074C:
-				ld			hl,$21A3				; ??
+				ld			hl,$21A3				; $44 long data block
 L074F:
 				ld			a,(hl)
 				and			a
@@ -1740,10 +1830,10 @@ L074F:
 				rlca										; 65432107
 				rlca										; 54321076
 				rlca										; 43210765
-				and			$07							; Old 3 MSBs
+				and			$07							; Mines to to 7
 
-				;; hl=$2067 + (2*a*$0D)
-				ld			de,MINES + $02 - (2*MINC)	; ($2067)
+				;; hl= X position of mine
+				ld			de,MINES - (2*MINC) + $02	; ($2067 = XPOS)
 				ld			bc,MINC					; Mine increment
 				ex			de,hl
 L0761:
@@ -1762,7 +1852,15 @@ L0761:
 L0771:
 				dec			hl
 				dec			hl
+
+#IF MINEFIX
+				ld			a,(hl)
+				and			$7F							; Clear active bit
+				ld			(hl),a
+#ELSE
 				ld			(hl),$00
+#ENDIF
+
 				ex			de,hl
 				dec			hl
 				ld			a,(hl)
@@ -1774,23 +1872,27 @@ L0771:
 				ld			e,(hl)
 				inc			hl
 				push		hl
-				call		L0A00
+				call		L0A00						; Get address for shifted data
 
+				;; Make sure explosion fits on screen
+				;; 0-11   -> 0
+				;; 1D-1F -> 1C
 				ld			a,e
 				and			$1F
-				jp			z,L0796
+				jp			z,L0796					; e=$00
 
 				dec			a
-				jp			z,L0796
+				jp			z,L0796					; e=$01
 
 L0790:
 				dec			a
 				cp			$1C
-				jp			p,L0790
+				jp			p,L0790					; Loop
 
+				;; Draw mine explosion
 L0796:
 				ld			e,a
-				call		L07DB						; de to first empty slot
+				call		L07DB						; de to first empty missile slot
 
 				ld			b,d
 				inc			b
@@ -1830,8 +1932,12 @@ L0796:
 				ld			d,(hl)
 				ex			de,hl						; hl = Table entry
 #ELSE
+#IF MOREEXP
+				and			$18							; Mask bit (a=0/8/10/18)
+#ELSE
 				and			$08							; Mask bit (a=0/8)
-				ld			hl,TZAP
+#ENDIF
+				ld			hl,TZAP					; First mine explosion entry
 				ld			d,$00
 				ld			e,a							; Use de in case we cross a page boundry
 				add			hl,de						; hl = Table entry
@@ -1859,7 +1965,7 @@ L0796:
 				jp			L074F
 
 
-				;; Write de to first empty slot
+				;; Write de to first empty missile slot
 L07DB:
 				ld			hl,HMISS				; Missile table
 L07DE:
@@ -1890,15 +1996,50 @@ L07EA:
 #ENDIF
 
 				cp			$40
-				jp			c,L07F4
+
+#IF MINEFIX
+				jp			c,LT40
+
+MAXMINE:
+				ld			a,$30						; Min of score or $30
+LT40:
+				and			$30							; Clear LSBs
+				add			a,$10
+				ld			hl,MINES
+				ld			bc,MINC
+
+NEWMINE:
+				ld			e,a							; Stash a
+				ld			a,(hl)					; Mine status
+				and			a
+				jp			m,NMEND					; Already active
+
+				or			$80							; Activate mine
+				ld			(hl),a					; Mine status
+				inc			hl
+				inc			hl
+				ld			a,(hl)					; Mine X pos
+				add			a,$80						; Reposition
+				ld			(hl),a					; Mine X pos
+				dec			hl
+				dec			hl
+
+NMEND:
+				add			hl,bc						; Next mine
+				ld			a,e							; Restore a
+				sub			$08
+				jp			nz,NEWMINE			; Loop
+				ret
+
+#ELSE
+				jp			c,L07F4					; <$40
 
 MAXMINE:
 				ld			a,$39						; Min of score or $39
-
 L07F4:
 				ld			($202C),a				; Mine counter
 
-				ld			hl,$207F				; 1st mine sprite
+				ld			hl,MINES				; 1st mine sprite
 				ld			de,$5050				; Initial Mine X,Y
 
 L07FD:
@@ -1906,10 +2047,11 @@ L07FD:
 				and			a
 				jp			m,L0835					; Mine needs to be erased
 
-				;; Launch mine?
+				;; Launch mine
+NEWMINE:
 L0802:
 				ld			bc,$0008
-				add			hl,bc						; Advance in sprite table
+				add			hl,bc						; Advance in sprite entry
 				ld			(hl),MINE>>8		; Mine MSB (+8)
 				dec			hl
 				ld			(hl),MINE&$FF 	; Mine LSB (+7)
@@ -1925,6 +2067,8 @@ L0802:
 				ld			(hl),$01				; Delta X (+1)
 				dec			hl
 				ld			(hl),$80				; Flags
+
+NOMINE:
 				ld			a,d
 				add			a,$51
 				ld			d,a
@@ -1941,10 +2085,9 @@ L0802:
 				ld			e,a
 
 L082E:
-				ld			bc,$000D				; Sprite table increment
+				ld			bc,SINC					; Sprite table increment
 				add			hl,bc						; Next mine
 				jp			L07FD						; More mines!
-
 
 				;; Erase mine area before launch
 L0835:
@@ -1957,30 +2100,30 @@ L0835:
 				inc			hl
 				inc			hl
 				ld			d,(hl)
-				call		L0A00
+				call		L0A00						; Get address for shifted data
 				ex			de,hl
 				ld			bc,$1002				; 16 x 2 byte area
 				call		L0A3F						; Clear area at hl
 				pop			de
 				pop			hl
 				jp			L0802
-
+#ENDIF
 
 				;; Handle high score erase
 HERASE:
 				ret			z
-				xor			a
+				xor			a								; a=0
 
 #IF SC3DIG
 				ld			hl,HSCORE
-				ld			(hl),a
+				ld			(hl),a					; High score LSB
 				inc			hl
-				ld			(hl),a
+				ld			(hl),a					; High score MSB
 #ELSE
 				ld			(HSCORE),a			; Clear high score
 #ENDIF
 
-				ld			a,($2010)
+				ld			a,(TIMER1)
 				and			a
 				ret			z
 
@@ -2016,7 +2159,7 @@ L085E:
 				;; $09E8 Entry B = Write low 3 bits of $2003 to $2029?
 JTBLB:													; $086D
 				ex			de,hl						; Sequence back to hl
-				ld			($2000),hl			; Store
+				ld			(PRGPTR),hl			; Store
 
 				ld			a,(TIMER)				; 
 				and			$07							; Mask low 3 bits
@@ -2028,11 +2171,12 @@ L087C:
 				ld			($2029),a				; Write
 				ret
 
+#IF OLDINT
 				;; End of game clears
 L0880:
 				di
 				ex			de,hl						; Stash hl in de
-				ld			($2000),hl
+				ld			(PRGPTR),hl
 				xor			a
 				out			($02),a					; Clear periscope lamp
 				out			($05),a					; Clear audio latches
@@ -2049,20 +2193,98 @@ L0898:
 				jp			nz,L0898									; Loop
 				ld			sp,$2400
 				jp			(hl)
-
+#ENDIF
 
 				;; $09E8 Entry 3 (End game)
 JTBL3:
 L08A2:
-				pop			hl							; Return address
+				pop			hl							; Return address (SP trashed)
+#IF OLDINT
 				ld			($2009),hl			; Stash in ($2009-200a)
-				call		L0880						; Does this ever return?
+				call		L0880						; End of game clears
 				ld			hl,($2009)			; Get return address back
-				push		hl							; Push back to stack
+#ELSE
+				;; Embedded end of game clears
+				di
+				ex			de,hl						; hl = program stack
+				ld			(PRGPTR),hl			; Next command
+				ex			de,hl						; hl = return address  REDO THIS
+				xor			a
+				out			($02),a					; Clear periscope lamp
+				out			($05),a					; Clear audio latches
+				out			($01),a					; Clear explosion lamp
 
+				;; Clear $400F down to $2010
+				ld			bc,$0000
+				ld			de,$0000
+				ld			a,$10
+				ld			sp,$4010				; Push it real good
+CLRLOOP:
+				push		bc
+				inc			de
+				cp			d
+				jp			nz,CLRLOOP			; Loop
+
+				ld			sp,$2400				; Reset stack pointer
+#ENDIF
+				push		hl							; Restore return address
+
+#IF MINEFIX
+				;; Initial X,Y = d,e = $50,$50
+				;; For Mine fix:
+				;; $00, $20:		Y=$50, dX= 1, Flags=$00
+				;; $40, $60:		Y=$70, dx= 1, Flags=$00
+				;; $80, $A0:		Y=$90, dX= 1, Flags=$00
+				;; $C0, $E0:		Y=$B0, dx= 1, Flags=$00
+				
+				;; For Seawolf '24:
+				;; $00, $20:		Y=$50, dX= 1, Flags=$00
+				;; $40, $60:		Y=$70, dx=-1, Flags=$40
+				;; $80, $A0:		Y=$90, dX= 2, Flags=$00
+				;; $C0, $E0:		Y=$B0, dx=-2, Flags=$40
+
+SETMINES:
+				ld			a,$00						; Loop counter
+				ld			hl,MINES				; First mine
+				ld			d,$50						; Initial mine x
+SMLOOP:
+				ld			e,a							; Stash counter
+				inc			hl							; +1 = Delta X
+				inc			(hl)						; +/-1
+				inc			hl							; +2 = X Pos
+				ld			(hl),d
+				inc			hl							; +3 = Y flags
+				inc			hl							; +4 = Delta Y
+				inc			hl							; +5 = Y Pos
+				ld			a,e
+				and			$DF							; $00/$00/$40/$40/$80/$80/$C0/$C0
+				rra											; $00/$00/$20/$20/$40/$40/$60/$60
+				add			a,$50						; $50/$50/$70/$70/$90/$90/$B0/$B0
+				ld			(hl),a
+				inc			hl							; +6 = ???
+				inc			hl							; +7 = ROM LSB
+				ld			(hl),MINE&$FF
+				inc			hl							; +8 = ROM MSB
+				ld			(hl),MINE>>8
+
+				ld			a,c							; Restore a
+				ld			bc,MINC-$08			; At $08, advance to $0d
+				add			hl,bc
+				ld			c,a							; Stash a
+
+				ld			a,d							; X Pos
+				add			a,$50						; +$50
+				ld			d,a
+
+				ld			a,e
+				add			a,$20						; Next mine
+				jp			nz,SMLOOP
+#ENDIF
+
+				;; Fresh water
 				ld			hl,L0F04				; Water
-				ld			de,$27E0
-				ld			a,$20
+				ld			de,WAVLOC				; Screen location
+				ld			a,$20						; Length
 				jp			L0B30						; Draw string hl @ de, length a
 
 L08B8:
@@ -2080,6 +2302,7 @@ HRET:
 				ret
 
 #IF SC3DIG
+				;; Check free play
 CHKFP:
 				in			a,($02)					; IN1 (DIPs)
 				and			$04
@@ -2177,15 +2400,16 @@ L0906:
 #ELSE
 				rrca										; 076543210
 				rrca										; 107654321
-				and			$30
+				and			$30							; Game time DIPs
 				add			a,$61						; $61/$71/$81/$91
 #ENDIF
 
 				ld			(GTIME),a				; Store time
 				ld			($202A),a				; Store time
+
 				ret
 
-#IF 0 
+#IF 1-SC3DIG
 				;; 	(original code, not used for 3 dig)?
 L091A:
 				ld			a,(IN1)					; Last IN1
@@ -2203,18 +2427,22 @@ L091A:
 
 				;; $2000 at reset
 				;; Attract mode loop
+
+				;; Clear 1 char for unknown reason
 L0929:
 				.db			$04							; Command 4 = String
 				.db			$01							; Length
 				.dw			LTBLANK					; String src address
 				.dw			$3E30						; Screen dst address
 
+				;; INSERT COIN or PUSH BUTTOM
 				.db			$09							; Commnad 9
 				.dw			CREDIT					; ($2005) -> a   (select string)
 				.dw			$3833						; Location
 				.dw			LTCOIN					; "Insert Coin"
 				.dw			LTPUSH					; "Push Button"
 
+				;; HIGH SCORE / YOUR SCORE
 				.db			$04							; Command 4 = String
 #IF SC3DIG
 				.db			$1B							; Length
@@ -2224,6 +2452,7 @@ L0929:
 				.dw			LTHIGH					; String src address
 				.dw			$3C02						; Screen dst address
 
+				;; Draw high score
 				.db			$0A							; Command A = BCD @ loc
 				.dw			HSCORE					; bc = 2006 = high score
 #IF OLDINT
@@ -2231,6 +2460,7 @@ L0929:
 #ENDIF
 				.dw			$3E25						; Screen loc
 
+				;; Draw player score
 				.db			$0A							; Command A = BCD @ loc
 				.dw			PSCORE					; bc = 202b = score
 #IF OLDINT
@@ -2242,9 +2472,11 @@ L0929:
 				.dw			$3E35						; Screen loc
 #ENDIF
 
+				;; Delay
 				.db			$02							; Command 2 = arg to 2010
 				.db			$0F							; arg
 
+				;; GAME OVER
 L094E:
 				.db			$04							; Command 4 = String
 				.db			$09							; Length
@@ -2257,7 +2489,7 @@ L094E:
 
 				.db			$00							; Command 0 = Wait for $2011 timer
 
-
+				;; Clear GAME OVER
 				.db			$04							; Command 4 = String
 				.db			$09							; Length
 				.dw			LTBLANK					; String src address
@@ -2269,22 +2501,27 @@ L094E:
 
 				.db			$00							; Command 0 = Wait for $2011 timer
 
+				;; Loop
 				.db			$06							; Command 6 = Set ($2000)
 				.dw			L094E						; Next command address
 
+				;; End of game
 L0963:
 				.db			$03							; Do end of game sequence
 
+				;; SEA WOLF
 				.db			$04							; Command 4 = String
 				.db			$08							; Length
 				.dw			LTSEA						; String src address (SEA WOLF)
 				.dw			$2C0C						; Screen dst address
 
+				;; HIGH SCORE / YOUR SCORE
 				.db			$04							; Command 4 = String
 				.db			$0A							; Length
 				.dw			LTHIGH					; String src address (HIGH SCORE)
 				.dw			$3C02						; Screen dst address
 
+				;; Draw high score
 				.db			$0A							; Command A = BCD @ loc
 				.dw			HSCORE					; bc = 2006 = high score
 #IF OLDINT
@@ -2292,6 +2529,7 @@ L0963:
 #ENDIF
 				.dw			$3E25						; Screen loc
 
+				;; INSERT COIN / PUSH BUTTOM
 				.db			$09							; Commnad 9
 				.dw			CREDIT					; ($2005) -> a   (select string)
 				.dw			$3833						; Location
@@ -2317,7 +2555,7 @@ L0963:
 				.db			$01							; $01 = Delta x
 				.db			$C4							; $C4 = Flags (Ship 4, active)
 
-				;; Delay timer
+				;; Delay
 				.db			$01							; Command 1 = arg to 2011
 				.db			$5A							; arg
 
@@ -2336,12 +2574,13 @@ L0963:
 				.db			$00							; $00 = Delta X
 				.db			$C0							; $C0 = Flags (Non-ship, active)
 
-				;; Delay timer
+				;; Delay
 				.db			$01							; Command 1 = arg to 2011
 				.db			$B4							; arg
 
 				.db			$00							; Command 0 = Wait for $2011 timer
 
+				;; Loop
 				.db			$06							; Command 6 = Set ($2000)
 				.dw			L0963						; Next command address
 
@@ -2356,6 +2595,7 @@ L09A6:
 
 				.db			$03							; Command 3 = End game
 
+				;; TIME / SCORE
 				.db			$04							; Command 4 = String
 				.db			$09							; Length
 				.dw			LTTIME					; String src address (TIME/SCORE)
@@ -2454,6 +2694,9 @@ L0A06:
 				ret
 
 
+				;; a = loop counter
+				;; Copy a bytes from (hl) to (bc)
+				;; OR   a bytes from (hl) to 
 L0A16:
 				push		af							; Store count
 				ld			a,(hl)					; Get value
@@ -2465,7 +2708,7 @@ L0A16:
 				ld			(de),a
 				pop			af							; Restore count
 				push		hl
-				ld			hl,$0020				; Row increment
+				ld			hl,RINC					; Row increment
 				add			hl,de						; hl = de+$0020
 				pop			de							; de = old hl
 				dec			a
@@ -2486,7 +2729,7 @@ L0A2C:
 				jp			nz,L0A2C				; Loop for col
 
 				pop			hl
-				ld			bc,$0020				; Row increment
+				ld			bc,RINC					; Row increment
 				add			hl,bc
 				pop			bc
 				dec			b
@@ -2507,7 +2750,7 @@ L0A42:
 				jp			nz,L0A42				; Loop for col
 
 				pop			hl
-				ld			bc,$0020				; Row increment
+				ld			bc,RINC					; Row increment
 				add			hl,bc
 				pop			bc
 				dec			b
@@ -2520,10 +2763,16 @@ L0A42:
 				;; Print high score / player score
 JTBLA:													; $0A53
 				ex			de,hl
+
+#IF GETMAC
+				call		GETBC
+#ELSE
 				ld			c,(hl)					; Read bc (address of score)
 				inc			hl
 				ld			b,(hl)
 				inc			hl
+#ENDIF
+
 #IF OLDINT
 				ld			e,(hl)					; Read de
 				inc			hl
@@ -2559,7 +2808,7 @@ JTBLA:													; $0A53
 				call		GETDE						; (hl, hl+1) -> de, hl+=2
 #ENDIF
 
-				ld			($2000),hl			; Next command 
+				ld			(PRGPTR),hl			; Next command 
 				pop			hl
 #IF SC3DIG
 				ld			a,$05						; Length for 5 digit
@@ -2721,7 +2970,7 @@ L0AB0:
 				dec			de
 				dec			b
 				jp			nz,L0AB0
-				ld			($2000),hl			; Next command
+				ld			(PRGPTR),hl			; Next command
 				ret
 
 				;; $09E8 Entry 9 -- Draw INSERT COIN or PUSH BUTTON
@@ -2730,20 +2979,20 @@ JTBL9:													; $0ABC
 				call		GETDE						; (hl, hl+1) -> de, hl+=2
 				ld			a,(de)
 				call		GETDE						; (hl, hl+1) -> de, hl+=2
-				push		de
+				push		de							; Screen loc to stack
 				call		GETDE						; (hl, hl+1) -> de, hl+=2
-				push		de
+				push		de							; 1st string pointer to stack
 				call		GETDE						; (hl, hl+1) -> de, hl+=2
-				ld			($2000),hl			; Next command
+				ld			(PRGPTR),hl			; Next command
 
 				ex			de,hl
 				and			a
 				jp			z,L0AD5					; Draw first string?
-				ex			(sp),hl
+				ex			(sp),hl					; Swap 2nd pointer w/ 1st
 
 L0AD5:
-				pop			hl
-				pop			de
+				pop			hl							; String pointer
+				pop			de							; Screen location
 				ld			a,$0B						; Length
 				jp			L0B30						; Draw string hl @ de, length a
 
@@ -2761,11 +3010,17 @@ JTBL7:													; $0AE1
 				ld			a,(de)					; Next entry
 				inc			de
 				ex			de,hl
+
+#IF GETMAC
+				call		GETBC
+#ELSE
 				ld			c,(hl)					; Next entry
 				inc			hl
 				ld			b,(hl)					; Next entry
 				inc			hl
-				ld			($2000),hl			; Store command
+#ENDIF
+
+				ld			(PRGPTR),hl			; Store command
 				ld			(bc),a					; a -> (bc)
 				ret
 
@@ -2783,7 +3038,7 @@ JTBL5:													; $0AED
 				ld			a,(hl)
 				inc			hl
 				call		GETDE						; (hl, hl+1) -> de, hl+=2
-				ld   ($2000),hl					; Store command
+				ld			(PRGPTR),hl			; Store command
 
 				ex			de,hl
 				ld			(hl),$DB				; ?? constant?
@@ -2839,7 +3094,7 @@ JTBL4:													; $0E22
 				call		GETDE						; (hl, hl+1) -> de, hl+=2
 				push		de
 				call		GETDE						; (hl, hl,1) -> de, hl+=2
-				ld			($2000),hl			; Next command
+				ld			(PRGPTR),hl			; Next command
 				pop			hl							; String src address
 
 				;; Write string length a from hl to de
@@ -2881,7 +3136,7 @@ L0B54:
 
 L0B59:
 				ex			de,hl
-				ld			bc,$0020				; Row increment
+				ld			bc,RINC					; Row increment
 				ld			a,$0A						; Loop $a times
 
 L0B5F:
@@ -2903,22 +3158,22 @@ L0B5F:
 
 				ret
 
-				;; $09E8 Entry 2  (argument to 2010)
+				;; $09E8 Entry 2  (set TIMER1)
 JTBL2:													; $0B72
 				ex			de,hl
 				ld			a,(hl)					; Argument
 				inc			hl
-				ld			($2000),hl			; Next command
-				ld			($2010),a				; Store arg
+				ld			(PRGPTR),hl			; Next command
+				ld			(TIMER1),a			; Store arg
 				ret
 
-				;; $09E8 Entry 1 (argument to 2011)
+				;; $09E8 Entry 1 (set TIMER2)
 JTBL1:													; $0B7C
 				ex			de,hl
 				ld			a,(hl)					; Argument
 				inc			hl
-				ld			($2000),hl			; Next command
-				ld			($2011),a				; Store arg
+				ld			(PRGPTR),hl			; Next command
+				ld			(TIMER2),a			; Store arg
 				ret
 
 				;; $09E8 Entry 6 (de) -> $2000
@@ -2928,7 +3183,7 @@ JTBL6:													; $0B86
 				inc			hl
 				ld			d,(hl)
 				ex			de,hl
-				ld			($2000),hl			; Store command
+				ld			(PRGPTR),hl			; Store command
 				ret
 
 				;; Character table
@@ -2946,39 +3201,36 @@ MINEEXP:																									; $0EB5
 				.db			$3D, $3E, $3F															; Mine explosion
 
 LTBLANK:																									; $0EB8
-				.db			$40, $40, $40, $40, $40, $40, $40, $40		; ________
-				.db			$40, $40, $40															; ___
+				.db			"@@@@@@@@@@@"															; ___________
 
 LTOVER:																										; $0EC3
-				.db			$47, $41, $4D, $45, $40, $4F, $56, $45		; GAME_OVE
-				.db			$52																				; R
+				.db			"GAME@OVER"																; GAME_OVER
 
 LTHIGH:																										; $0ECC 
-				.db			$48, $49, $47, $48, $40, $53, $43, $4F		; HIGH_SCO
-				.db			$52, $45,																	; RE
+				.db			"HIGH@SCORE"															; HIGH_SCORE
 #IF SC3DIG
-				.db			$40, $40, $40, $40, $40, $40, $40					; _______
+				.db			"@@@@@@@"																	; _______
 #ELSE
-				.db			$40, $40, $40, $40, $40, $40							; ______
+				.db			"@@@@@@"																	; ______
 #ENDIF
-				.db			$59, $4F, $55, $52, $40, $53, $43, $4F		; YOUR_SCO
-				.db			$52, $45																	; RE
+				.db			"YOUR@SCORE"															; YOUR_SCORE
 
 LTCOIN:																										; $0EE6
-				.db			$49, $4E, $53, $45, $52, $54, $40, $43		; INSERT_C
-				.db			$4F, $49, $4E															; OIN
+				.db			"INSERT@COIN"															; INSERT_COIN
 
 LTPUSH:																										; $0EF1
 #IF SC3DIG
-				.db			$50, $52, $45, $53, $53, $40, $53, $54		; PRESS_ST
-				.db			$41, $52, $54															; ART
+				.db			"PRESS@START"															; PRESS_START
 #ELSE
-				.db			$50, $55, $53, $48, $40, $42, $55, $54		; PUSH_BUT
-				.db			$54, $4F, $4E															; TON
+				.db			"PUSH@BUTTON"															; PUSH_BUTTON
 #ENDIF
 
-LTSEA:																									  ; $0EFC
-				.db			$53, $45, $41, $40, $57, $4F, $4C, $46		; SEA_WOLF
+LTSEA:																										; $0EFC
+#IF SW2024
+				.db			"SEAWOLFQ"																; SEAWOLF24
+#ELSE
+				.db			"SEA@WOLF"																; SEA_WOLF
+#ENDIF
 
 				;; Water
 L0F04:
@@ -2987,25 +3239,28 @@ L0F04:
 				.db			$3B, $3A, $3C, $3A, $3B, $3C, $3A, $3C		; Codes
 				.db			$3B, $3C, $3A, $3B, $3C, $3A, $3B, $3C		; Here
 
+#IF OLDINT
 LTBONUS:																									; $0F24 
-				.db			$42, $4F, $4E, $55, $53										; BONUS
+				.db			"BONUS"																		; BONUS
+#ENDIF
 
 LTTIME:																										; $0F29
-				.db			$54, $49, $4D, $45												; TIME
+				.db			"TIME"																		; TIME
+
 #IF SC3DIG
 				.db			$2C																				; <space>
 #ELSE
 				.db			$2D																				; <space>
 #ENDIF
-				.db			$53, $43, $4F, $52, $45										; SCORE
+				.db			"SCORE"																		; SCORE
 
 LTEXT:																					; $0F33 
-				.db			$45, $58, $54, $45, $4E, $44, $45, $44		; EXTENDED
+				.db			"EXTENDED"																; EXTENDED
 				.db			$16																				; <space>
 #IF SC3DIG
-				.db			$50, $4C, $41, $59     										; PLAY
+				.db			"PLAY"																		; PLAY
 #ELSE
-				.db			$54, $49, $4D, $45     										; TIME
+				.db			"TIME"																		; TIME
 #ENDIF
 
 #IF OLDINT
@@ -3015,13 +3270,17 @@ TEMINE:
 				.dw			TWAM																			; WAM
 #ENDIF
 
-				;; Table from $0F40 (For ZAP)
 TZAP:
-				.db			$01, $41, $04, $3D, $5A, $2F, $50, $3F		; *ZAP*
-
-				;; Table from $0F42 (For WAM)
+				.db			$01, "A", $04, $3D, "Z", $2F, "P", $3F		; *ZAP*
 TWAM:
-				.db			$01, $41, $04, $3D, $57, $2F, $4D, $3F		; *WAM*
+				.db			$01, "A", $04, $3D, "W", $2F, "M", $3F		; *WAM*
+
+#IF MOREEXP
+TPOW:
+				.db			$01, "O", $04, $3D, "P", $2F, "W", $3F		; *POW*
+TOOF:
+				.db			$01, "O", $04, $3D, "O", $2F, "F", $3F		; *OOF*
+#ENDIF
 
 #IF OLDDIP
 				;; 4-byte table (time per credit)
@@ -3090,6 +3349,11 @@ L0FDE:
 				.db			$03															; Big, flat top
 				.db			$05															; Tower in back
 				.db			$01															; Battleship
+
+#IF DOCOPY
+COPYRGHT:
+				.db			"MSPAETH@2024"
+#ENDIF
 
 #IF OLDTEST
 				.org		$0fff
