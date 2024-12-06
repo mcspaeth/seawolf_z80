@@ -4,22 +4,24 @@
 				;; Programmed for tasm z80 mode using only 8080 instructions
 
 				;; Config variables
-				;; Original release: SC3DIG=0, OLDDIP=1, OLDINT=1, OLDTEST=1, MINEFIX=0
-				;; 3 digit scoring:  SC3DIG=1, OLDDIP=1, OLDINT=0, OLDTEST=0, MINEFIX=0
+				;; Original release: SC3DIG=0, OLDDIP=1, OLDINT=1, OLDTEST=1, GETMAC=0, MINEFIX=0, FANCY=0, SEAMISS=0
+				;; 3 digit scoring:  SC3DIG=1, OLDDIP=1, OLDINT=0, OLDTEST=0, GETMAC=0, MINEFIX=0, FANCY=0, SEAMISS=0
 
 SC3DIG	= 1											; 3 digit scoring, simplified coinage
 OLDDIP	= 0											; Table lookup vs calculated DIPs
 OLDINT	= 0											; Exclude interpreter changes that save bytes
 OLDTEST	= 0											; Use $0200 byte self test routine
-GETMAC	= 0											; Use jsr for GETBC, GETDE (saves 1 byte per -- unneeded)
+GETMAC	= 0											; Use jsr for GETBC, GETDE (saves 1 byte per)
 MOREEXP	= 1											; More mine explosion text
 MINEFIX	= 1											; Fix the mines jumping on reload
+FANCY		= 1											; Bidirectional / multi-speed mines
 DOCOPY	= 1											; Add copyright to self test
 HSSAVE	= 0											; Prevent HS from being cleared at reset
-				
+SEAMISS	= 1											; Count down misses instead of time
+
 				;; Graphics changes
-OLDMINE	= 1											; Use original mine gfx
-SW2024	= 0											; Change Q to '24
+OLDMINE	= 1-FANCY								; Use original mine gfx
+SW2024	= 1											; Change Q to '24
 
 				;; Generic variables
 SINC		= $000D									; Ship entry length
@@ -615,7 +617,16 @@ L0207:
 				and			$BF							; Clear bit 5 (Ship done)
 				ld			(hl),a
 				ex			(sp),hl
+
+#IF SEAMISS
+				ld			a,(GTIME)
+				and			a
+				jp			z,L0216					; Game over
+
+				ld			(MISSED),a			; Set to non-zero value
+#ELSE
 				jp			L0216
+#ENDIF
 
 L0210:
 				inc			hl
@@ -958,6 +969,16 @@ L0368:
 				;; $2003 Counter zero
 				ld			(hl),$1E				; Reset counter
 
+#IF SEAMISS
+				;; Handle MISSED flag
+				ld			a,(MISSED)
+				and			a
+				jp			z,L0388					; No miss
+
+				xor			a
+				ld			(MISSED),a
+#ENDIF
+
 				ld			hl,GTIME				; Game timer
 				ld			a,(hl)
 				and			a
@@ -1159,6 +1180,7 @@ L043A:
 				ld			hl,GTIME				; $2002
 				ld			a,$09						; $2002-$200a
 #ENDIF
+
 				ld			b,$00
 L044D:
 				ld			(hl),b
@@ -1355,7 +1377,11 @@ L0511:
 #ENDIF
 
 DOEXT:
+#IF SEAMISS
+				ld			a,$04						; 4 extra misses
+#ELSE
 				ld			a,$20						; 20 extra seconds
+#ENDIF
 				ld			(GTIME),a				; Set game time
 				ld			hl,LTEXT				; EXTENDED_TIME
 				ld			de,$3C03				; Location
@@ -2251,6 +2277,27 @@ SMLOOP:
 				ld			e,a							; Stash counter
 				inc			hl							; +1 = Delta X
 				inc			(hl)						; +/-1
+
+#IF FANCY
+				and			a								; High bit set = +/2
+				jp			p,SMROW01				; Rows 0 and 1
+
+SMROW23:
+				inc			(hl)						; +/-2
+SMROW01:
+				and			$40
+
+				jp			z,SMROW02				; Rows 0 and 2
+SMROW13:
+				dec			hl							; +0 = Flags
+				ld			(hl),$10				; Direction flag
+				inc			hl							; +1 = Delta X
+				xor			a								; a=0
+				sub			(hl)						; Invert
+				ld			(hl),a
+SMROW02:
+#ENDIF
+
 				inc			hl							; +2 = X Pos
 				ld			(hl),d
 				inc			hl							; +3 = Y flags
@@ -2398,14 +2445,27 @@ L0906:
 				ld			e,a
 				ld			a,(de)
 #ELSE
+#IF SEAMISS
+				rlca										; 65432107
+				rlca										; 54321076
+				rlca										; 43210765
+				and			$06							; Miss DIPs
+				add			a,$10						; $10/$12/$14/$16
+#ELSE
 				rrca										; 076543210
 				rrca										; 107654321
 				and			$30							; Game time DIPs
 				add			a,$61						; $61/$71/$81/$91
 #ENDIF
+#ENDIF
 
 				ld			(GTIME),a				; Store time
 				ld			($202A),a				; Store time
+
+#IF SEAMISS
+				xor			a
+				ld			(MISSED),a			; Clear missed flag
+#ENDIF
 
 				ret
 
@@ -3245,8 +3305,11 @@ LTBONUS:																									; $0F24
 #ENDIF
 
 LTTIME:																										; $0F29
+#IF SEAMISS
+				.db			"MISS"																		; MISS
+#ELSE
 				.db			"TIME"																		; TIME
-
+#ENDIF
 #IF SC3DIG
 				.db			$2C																				; <space>
 #ELSE
