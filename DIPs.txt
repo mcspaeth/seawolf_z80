@@ -1,0 +1,29 @@
+Update DIP switces for Sea Wolf '24
+
+G4 8 7 6 5 4 3 2 1
+   0 0 0             = Extended play (none)
+   0 0 1             = Extended play at 2000
+   0 1 0             = Extended play at 3000
+   0 1 1             = Extended play at 4000
+   1 0 0             = Extended play at 5000
+   1 0 1             = Extended play at 6000
+   1 1 0             = Extended play at 7000
+   1 1 1             = Extended play at 8000
+
+G4 8 7 6 5 4 3 2 1
+         0           = Leave high scores
+         1           = Clear high scores
+
+G4 8 7 6 5 4 3 2 1
+           0         = Game mode
+           1         = Test mode
+
+G4 8 7 6 5 4 3 2 1
+             0       = 1 Coin / 1 Play
+             1       = Free Play
+
+G4 8 7 6 5 4 3 2 1
+               0 0   = 10 misses + 4 bonus
+               0 1   = 12 misses + 4 bonus
+               1 0   = 14 misses + 4 bonus
+               1 1   = 18 misses + 4 bonus
